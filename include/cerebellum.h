@@ -77,6 +77,7 @@ class State {
 public:
 
 	State();
+	State(astate_p);
 	State(std::vector<astate_p>);
 	State(std::initializer_list<astate_p>);
 
@@ -97,6 +98,8 @@ public:
 
 	bool operator<(const State&) const;
 
+	bool accepts(const transition_p) const;
+
 	State move(const transition_p) const;
 	State move_back(const transition_p) const;
 
@@ -114,24 +117,40 @@ class Transition {
 
 public:
 
-	static transition_p create_natural(std::string label, 
-							const astate_p from, const astate_p to, 
-							double probability = 1, unsigned int priority = 0);
+	static transition_p create_natural(std::string label, const astate_p from, 
+			const astate_p to, double probability = 1, unsigned int priority = 0);
 
-	static transition_p create_controlled(std::string label, 
-							const astate_p from, const astate_p to, 
-							unsigned int restriction = 0, double cost = 1);
+	static transition_p create_controlled(std::string label, const astate_p from, 
+			const astate_p to, unsigned int restriction = 0, double cost = 1);
 
-	static transition_p create_external(std::string label, 
-							const astate_p from, const astate_p to,
-							double cost = 1, double probability = 1);
+	static transition_p create_external(std::string label, const astate_p from, 
+			const astate_p to, double cost = 1, double probability = 1);
+
+	static transition_p create_natural(std::string label, const State& from, 
+			const State& to, double probability = 1, unsigned int priority = 0);
+
+	static transition_p create_controlled(std::string label, const State& from, 
+			const State& to, unsigned int restriction = 0, double cost = 1);
+
+	static transition_p create_external(std::string label, const State& from, 
+			const State& to, double cost = 1, double probability = 1);
 
 	virtual ~Transition() = default;
 
+	bool available_at(const State&) const;
+
+	void activate(const State&);
+	void activate(const astate_p);
+	void activate(std::initializer_list<astate_p>);
+
+	void inhibit(const State&);
+	void inhibit(const astate_p);
+	void inhibit(std::initializer_list<astate_p>);
+
 	const std::string label;
 
-	const astate_p from;
-	const astate_p to;
+	const State from;
+	const State to;
 
 	const enum transition_type {
 		NATURAL,
@@ -144,12 +163,12 @@ public:
 
 	const unsigned int level;
 
-	std::set<astate_p> conditions;
-	bool active_conditions;
-
 protected:
 
-	Transition(std::string label, const astate_p from, const astate_p to, 
+	std::set<State> conditions;
+	bool active_conditions;
+
+	Transition(std::string label, const State& from, const State& to, 
 				transition_type type, double cost, double probability, 
 				unsigned int level, bool active_conditions);
 
@@ -239,16 +258,22 @@ components()
 
 }
 
+State::State(astate_p as) :
+components()
+{
+	components.push_back(as);
+}
+
 State::State(std::vector<astate_p> components) :
 components(components)
 {
-	std::sort(this->components.begin(), this->components.end());
+
 }
 
 State::State(std::initializer_list<astate_p> components) :
 components(components)
 {
-	std::sort(this->components.begin(), this->components.end());
+
 }
 
 bool State::empty() const {
@@ -266,6 +291,8 @@ bool State::contains(const astate_p x) const {
 bool State::contains(std::vector<astate_p> X) const {
 	std::vector<astate_p> a = components;
 	std::vector<astate_p> b = X;
+	std::sort(a.begin(), a.end());
+	std::sort(b.begin(), b.end());
 	return std::includes(a.begin(), a.end(), b.begin(), b.end());
 }
 
@@ -285,20 +312,35 @@ bool State::operator<(const State& o) const {
 	if(dimension() != o.dimension()){
 		return dimension() < o.dimension();
 	}else{
+		std::vector<astate_p> a = components;
+		std::vector<astate_p> b = o.components;
+		std::sort(a.begin(), a.end());
+		std::sort(b.begin(), b.end());
 		for(int i = 0; i < dimension(); i++){
-			if(components[i] != o.components[i]){
-				return components[i] < o.components[i];
+			if(a[i] != b[i]){
+				return a[i] < b[i];
 			}
 		}
 		return false;
 	}
 }
 
+bool State::accepts(const transition_p t) const {
+	return contains(t->from);
+}
+
 State State::move(const transition_p t) const {
 	if(contains(t->from)){
+		std::vector<std::pair<astate_p, astate_p>> changes;
+		for(int i = 0; i < t->from.dimension(); i++){
+			changes.push_back(std::make_pair(t->from.components[i], t->to.components[i]));
+		}
+
 		std::vector<astate_p> new_components = components;
-		auto it = std::find(new_components.begin(), new_components.end(), t->from);
-		*it = t->to;
+		for(auto ft : changes){
+			auto it = std::find(new_components.begin(), new_components.end(), ft.first);
+			*it = ft.second;
+		}
 		return State(new_components);
 	}else{
 		return State();
@@ -307,9 +349,16 @@ State State::move(const transition_p t) const {
 
 State State::move_back(const transition_p t) const {
 	if(contains(t->to)){
+		std::vector<std::pair<astate_p, astate_p>> changes;
+		for(int i = 0; i < t->from.dimension(); i++){
+			changes.push_back(std::make_pair(t->from.components[i], t->to.components[i]));
+		}
+
 		std::vector<astate_p> new_components = components;
-		auto it = std::find(new_components.begin(), new_components.end(), t->to);
-		*it = t->from;
+		for(auto ft : changes){
+			auto it = std::find(new_components.begin(), new_components.end(), ft.second);
+			*it = ft.first;
+		}
 		return State(new_components);
 	}else{
 		return State();
@@ -329,7 +378,7 @@ std::ostream& operator<<(std::ostream& os, const State& s){
 
 //-----------------------------------------------------------------------------
 
-Transition::Transition(std::string label, const astate_p from, const astate_p to, 
+Transition::Transition(std::string label, const State& from, const State& to, 
 				transition_type type, double cost, double probability, 
 				unsigned int level, bool active_conditions) :
 label(label),
@@ -347,17 +396,92 @@ active_conditions(active_conditions)
 
 transition_p Transition::create_natural(std::string label, const astate_p from, 
 				const astate_p to, double probability, unsigned int priority){
-	return transition_p(new Transition(label, from, to, NATURAL, 1, probability, priority, true));
+	return transition_p(new Transition(label, State({from}), State({to}), NATURAL, 1, probability, priority, true));
 }
 
 transition_p Transition::create_controlled(std::string label, const astate_p from,
 				const astate_p to, unsigned int restriction, double cost){
-	return transition_p(new Transition(label, from, to, CONTROLLED, cost, 1, restriction, false));
+	return transition_p(new Transition(label, State({from}), State({to}), CONTROLLED, cost, 1, restriction, false));
 }
 
 transition_p Transition::create_external(std::string label, const astate_p from, 
 				const astate_p to, double cost, double probability){
+	return transition_p(new Transition(label, State({from}), State({to}), EXTERNAL, cost, probability, 0, false));
+}
+
+transition_p Transition::create_natural(std::string label, const State& from, 
+				const State& to, double probability, unsigned int priority){
+	return transition_p(new Transition(label, from, to, NATURAL, 1, probability, priority, true));
+}
+
+transition_p Transition::create_controlled(std::string label, const State& from,
+				const State& to, unsigned int restriction, double cost){
+	return transition_p(new Transition(label, from, to, CONTROLLED, cost, 1, restriction, false));
+}
+
+transition_p Transition::create_external(std::string label, const State& from, 
+				const State& to, double cost, double probability){
 	return transition_p(new Transition(label, from, to, EXTERNAL, cost, probability, 0, false));
+}
+
+bool Transition::available_at(const State& s) const {
+	/* check transition conditions */
+	bool yes = true;
+	for(const State& c : conditions){
+		yes &= (!s.contains(c) ^ active_conditions);
+		if(!yes){
+			return false;
+		}
+	}
+	return yes;
+}
+
+void Transition::activate(const State& s){
+	if(!active_conditions){
+		active_conditions = true;
+		conditions.clear();
+	}
+	conditions.insert(s);
+}
+
+void Transition::activate(const astate_p as){
+	if(!active_conditions){
+		active_conditions = true;
+		conditions.clear();
+	}
+	conditions.insert(State(as));
+}
+
+void Transition::activate(std::initializer_list<astate_p> as){
+	if(!active_conditions){
+		active_conditions = true;
+		conditions.clear();
+	}
+	conditions.insert(State(as));
+}
+
+void Transition::inhibit(const State& s){
+	if(active_conditions){
+		active_conditions = false;
+		conditions.clear();
+	}
+	conditions.insert(s);
+}
+
+void Transition::inhibit(const astate_p as){
+	if(active_conditions){
+		active_conditions = false;
+		conditions.clear();
+	}
+	conditions.insert(State(as));
+}
+
+void Transition::inhibit(std::initializer_list<astate_p> as){
+	if(active_conditions){
+		active_conditions = false;
+		conditions.clear();
+	}
+	conditions.insert(State(as));
 }
 
 //-----------------------------------------------------------------------------
@@ -502,17 +626,18 @@ std::list<std::string> StateModel::find_path(const State from, const State to, u
 
 std::map<std::string, std::set<transition_p>> StateModel::all_transitions_from(const State from){
 	std::map<std::string, std::set<transition_p>> tm;
+	std::map<std::string, bool> disabled;
 
 	for(const transition_p t : transitions){
 		if(from.contains(t->from)){
 			/* check transition conditions */
-			bool pass = true;
-			for(const astate_p c : t->conditions){
-				pass &= (!from.contains(c) ^ t->active_conditions);
-			}
+			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(from);
 
 			if(pass){
 				tm[t->label].insert(t);
+			}else{
+				tm.erase(t->label);
+				disabled[t->label] = true;
 			}
 		}
 	}
@@ -522,17 +647,18 @@ std::map<std::string, std::set<transition_p>> StateModel::all_transitions_from(c
 
 std::map<std::string, std::set<transition_p>> StateModel::natural_transitions_from(const State from){
 	std::map<std::string, std::set<transition_p>> tm;
+	std::map<std::string, bool> disabled;
 
 	for(const transition_p t : transitions){
 		if(from.contains(t->from) && t->type == Transition::NATURAL){
 			/* check transition conditions */
-			bool pass = true;
-			for(const astate_p c : t->conditions){
-				pass &= (!from.contains(c) ^ t->active_conditions);
-			}
+			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(from);
 
 			if(pass){
 				tm[t->label].insert(t);
+			}else{
+				tm.erase(t->label);
+				disabled[t->label] = true;
 			}
 		}
 	}
@@ -542,17 +668,18 @@ std::map<std::string, std::set<transition_p>> StateModel::natural_transitions_fr
 
 std::map<std::string, std::set<transition_p>> StateModel::controlled_transitions_from(const State from, unsigned int restriction){
 	std::map<std::string, std::set<transition_p>> tm;
+	std::map<std::string, bool> disabled;
 
 	for(const transition_p t : transitions){
 		if(from.contains(t->from) && t->type == Transition::CONTROLLED && t->level <= restriction){
 			/* check transition conditions */
-			bool pass = true;
-			for(const astate_p c : t->conditions){
-				pass &= (!from.contains(c) ^ t->active_conditions);
-			}
+			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(from);
 
 			if(pass){
 				tm[t->label].insert(t);
+			}else{
+				tm.erase(t->label);
+				disabled[t->label] = true;
 			}
 		}
 	}
@@ -562,17 +689,18 @@ std::map<std::string, std::set<transition_p>> StateModel::controlled_transitions
 
 std::map<std::string, std::set<transition_p>> StateModel::external_transitions_from(const State from){
 	std::map<std::string, std::set<transition_p>> tm;
+	std::map<std::string, bool> disabled;
 
 	for(const transition_p t : transitions){
 		if(from.contains(t->from) && t->type == Transition::EXTERNAL){
 			/* check transition conditions */
-			bool pass = true;
-			for(const astate_p c : t->conditions){
-				pass &= (!from.contains(c) ^ t->active_conditions);
-			}
+			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(from);
 
 			if(pass){
 				tm[t->label].insert(t);
+			}else{
+				tm.erase(t->label);
+				disabled[t->label] = true;
 			}
 		}
 	}
@@ -581,24 +709,17 @@ std::map<std::string, std::set<transition_p>> StateModel::external_transitions_f
 }
 
 std::set<transition_p> StateModel::prioritized_natural_transitions_from(const State from){
-	std::map<astate_p, std::vector<transition_p>> ntv;
+	std::map<std::string, std::set<transition_p>> tm = natural_transitions_from(from);
+	std::map<State, std::vector<transition_p>> ntv;
 
 	/* check the bundle and see if there are multiple transitions
 	 * that originate from the same atomic state. if so, only apply
 	 * the one with the lowest level / highest priority */
-	for(const transition_p t : transitions){
-		if(from.contains(t->from) && t->type == Transition::NATURAL){
-			/* check transition conditions */
-			bool pass = true;
-			for(const astate_p c : t->conditions){
-				pass &= (!from.contains(c) ^ t->active_conditions);
-			}
-
-			if(pass){
-				ntv[t->from].push_back(t);
-			}
-		}
-	}
+	 for(auto& kv : tm){
+	 	for(const transition_p t : kv.second){
+	 		ntv[t->from].push_back(t);
+	 	}
+	 }
 
 	std::set<transition_p> nts;
 	for(auto& kv : ntv){

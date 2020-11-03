@@ -62,4 +62,27 @@ endif()
 # Test
 ###############################################################################
 
+add_library(catch2 INTERFACE)
+target_include_directories(catch2
+    INTERFACE 
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/test>
+)
+
+add_executable(test src/test/test.cxx)
+target_link_libraries(test cerebellum)
+target_link_libraries(test catch2)
+
+if(MSVC)
+	# using MSVC
+	target_compile_options(app PRIVATE /EHsc /W3 /WX)
+else()
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+		# using Clang
+		target_compile_options(app PRIVATE -Werror -Wall -Wextra)
+	elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+		# using GCC
+		target_compile_options(app PRIVATE -Werror -Wall -Wextra -pedantic)
+	endif()
+endif()
+
 ###############################################################################

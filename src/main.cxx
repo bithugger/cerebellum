@@ -60,20 +60,20 @@ int main(){
 
 	/* floor transition */
 	transition_p f1f2 = Transition::create_natural("moved_from_floor_1_to_floor_2", f1, f2);
-	f1f2->conditions.insert(mu);
+	f1f2->activate(mu);
 	transition_p f2f1 = Transition::create_natural("moved_from_floor_2_to_floor_1", f2, f1);
-	f2f1->conditions.insert(md);
+	f2f1->activate(md);
 	transition_p f2f3 = Transition::create_natural("moved_from_floor_2_to_floor_3", f2, f3);
-	f2f3->conditions.insert(mu);
+	f2f3->activate(mu);
 	transition_p f3f2 = Transition::create_natural("moved_from_floor_3_to_floor_2", f3, f2);
-	f3f2->conditions.insert(md);
+	f3f2->activate(md);
 
 	/* motion transitions */
 	transition_p msmu = Transition::create_controlled("start_ascending", ms, mu);
-	msmu->conditions.insert(da);
+	msmu->inhibit(da);
 	transition_p mums = Transition::create_controlled("stop_ascending", mu, ms);
 	transition_p msmd = Transition::create_controlled("start_descending", ms, md);
-	msmd->conditions.insert(da);
+	msmd->inhibit(da);
 	transition_p mdms = Transition::create_controlled("stop_descending", md, ms);
 	transition_p mumu = Transition::create_controlled("continue_ascending", mu, mu);
 	transition_p mdmd = Transition::create_controlled("continue_descending", md, md);
@@ -84,11 +84,11 @@ int main(){
 
 	/* door transitions */
 	transition_p dcda = Transition::create_controlled("open_door", dc, da);
-	dcda->conditions.insert(mu);
-	dcda->conditions.insert(md);
+	dcda->inhibit(mu);
+	dcda->inhibit(md);
 	transition_p dadc = Transition::create_controlled("close_door", da, dc);
-	dadc->conditions.insert(mu);
-	dadc->conditions.insert(md);
+	dadc->inhibit(mu);
+	dadc->inhibit(md);
 
 	/** state model with all atomic states and transitions **/
 	StateModel model({f1, f2, f3, mu, ms, md, dc, da}, 
