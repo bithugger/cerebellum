@@ -133,10 +133,10 @@ TEST_CASE("Transition logic", "[Transition]"){
 	}
 
 	SECTION("Transition conditions check"){
-		REQUIRE( a12->available_at(x) );
-		REQUIRE( a12->available_at(y) );
-		REQUIRE( a12->available_at(z) );
-		REQUIRE( a12->available_at(w) );
+		REQUIRE( !a12->available_at(x) );
+		REQUIRE( !a12->available_at(y) );
+		REQUIRE( !a12->available_at(z) );
+		REQUIRE( !a12->available_at(w) );
 
 		REQUIRE( a21->available_at(x) );
 		REQUIRE( !a21->available_at(y) );

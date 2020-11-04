@@ -118,19 +118,19 @@ class Transition {
 public:
 
 	static transition_p create_natural(std::string label, const astate_p from, 
-			const astate_p to, double probability = 1, unsigned int priority = 0);
+			const astate_p to, double cost = 1, double probability = 1, unsigned int priority = 0);
 
 	static transition_p create_controlled(std::string label, const astate_p from, 
-			const astate_p to, unsigned int restriction = 0, double cost = 1);
+			const astate_p to, double cost = 1, unsigned int restriction = 0);
 
 	static transition_p create_external(std::string label, const astate_p from, 
 			const astate_p to, double cost = 1, double probability = 1);
 
 	static transition_p create_natural(std::string label, const State& from, 
-			const State& to, double probability = 1, unsigned int priority = 0);
+			const State& to, double cost = 1, double probability = 1, unsigned int priority = 0);
 
 	static transition_p create_controlled(std::string label, const State& from, 
-			const State& to, unsigned int restriction = 0, double cost = 1);
+			const State& to, double cost = 1, unsigned int restriction = 0);
 
 	static transition_p create_external(std::string label, const State& from, 
 			const State& to, double cost = 1, double probability = 1);
@@ -160,12 +160,11 @@ public:
 	
 	const double cost;
 	const double probability;
-
 	const unsigned int level;
 
 protected:
 
-	std::set<State> conditions;
+	std::vector<std::set<State>> conditions;
 	bool active_conditions;
 
 	Transition(std::string label, const State& from, const State& to, 
@@ -223,6 +222,10 @@ public:
 	std::list<State> move(std::string);
 
 	State get_state();
+
+
+	std::list<std::string> find_path(const State to, 
+				unsigned int restriction = std::numeric_limits<unsigned int>::max());
 
 protected:
 
@@ -395,45 +398,58 @@ active_conditions(active_conditions)
 }
 
 transition_p Transition::create_natural(std::string label, const astate_p from, 
-				const astate_p to, double probability, unsigned int priority){
-	return transition_p(new Transition(label, State({from}), State({to}), NATURAL, 1, probability, priority, true));
+				const astate_p to, double cost, double probability, unsigned int priority){
+	return transition_p(new Transition(label, State({from}), State({to}), 
+						NATURAL, cost, probability, priority, true));
 }
 
 transition_p Transition::create_controlled(std::string label, const astate_p from,
-				const astate_p to, unsigned int restriction, double cost){
-	return transition_p(new Transition(label, State({from}), State({to}), CONTROLLED, cost, 1, restriction, false));
+				const astate_p to, double cost, unsigned int restriction){
+	return transition_p(new Transition(label, State({from}), State({to}), 
+						CONTROLLED, cost, 1, restriction, false));
 }
 
 transition_p Transition::create_external(std::string label, const astate_p from, 
 				const astate_p to, double cost, double probability){
-	return transition_p(new Transition(label, State({from}), State({to}), EXTERNAL, cost, probability, 0, false));
+	return transition_p(new Transition(label, State({from}), State({to}), 
+						EXTERNAL, cost, probability, 0, false));
 }
 
 transition_p Transition::create_natural(std::string label, const State& from, 
-				const State& to, double probability, unsigned int priority){
-	return transition_p(new Transition(label, from, to, NATURAL, 1, probability, priority, true));
+				const State& to, double cost, double probability, unsigned int priority){
+	return transition_p(new Transition(label, from, to, 
+						NATURAL, cost, probability, priority, true));
 }
 
 transition_p Transition::create_controlled(std::string label, const State& from,
-				const State& to, unsigned int restriction, double cost){
-	return transition_p(new Transition(label, from, to, CONTROLLED, cost, 1, restriction, false));
+				const State& to, double cost, unsigned int restriction){
+	return transition_p(new Transition(label, from, to, 
+						CONTROLLED, cost, 1, restriction, false));
 }
 
 transition_p Transition::create_external(std::string label, const State& from, 
 				const State& to, double cost, double probability){
-	return transition_p(new Transition(label, from, to, EXTERNAL, cost, probability, 0, false));
+	return transition_p(new Transition(label, from, to, 
+						EXTERNAL, cost, probability, 0, false));
 }
 
-bool Transition::available_at(const State& s) const {
+bool Transition::available_at(const State& x) const {
 	/* check transition conditions */
-	bool yes = true;
-	for(const State& c : conditions){
-		yes &= (!s.contains(c) ^ active_conditions);
-		if(!yes){
-			return false;
+	bool pass = !active_conditions;
+	for(const std::set<State> s : conditions){
+		bool sat = true;
+		for(const State& c : s){
+			sat &= x.contains(c);
+		}
+
+		if(active_conditions){
+			pass |= sat;
+		}else{
+			pass &= !sat;
 		}
 	}
-	return yes;
+
+	return pass;
 }
 
 void Transition::activate(const State& s){
@@ -441,7 +457,9 @@ void Transition::activate(const State& s){
 		active_conditions = true;
 		conditions.clear();
 	}
-	conditions.insert(s);
+	std::set<State> S;
+	S.insert(s);
+	conditions.push_back(S);
 }
 
 void Transition::activate(const astate_p as){
@@ -449,7 +467,9 @@ void Transition::activate(const astate_p as){
 		active_conditions = true;
 		conditions.clear();
 	}
-	conditions.insert(State(as));
+	std::set<State> S;
+	S.insert(State(as));
+	conditions.push_back(S);
 }
 
 void Transition::activate(std::initializer_list<astate_p> as){
@@ -457,7 +477,9 @@ void Transition::activate(std::initializer_list<astate_p> as){
 		active_conditions = true;
 		conditions.clear();
 	}
-	conditions.insert(State(as));
+	std::set<State> S;
+	S.insert(State(as));
+	conditions.push_back(S);
 }
 
 void Transition::inhibit(const State& s){
@@ -465,7 +487,9 @@ void Transition::inhibit(const State& s){
 		active_conditions = false;
 		conditions.clear();
 	}
-	conditions.insert(s);
+	std::set<State> S;
+	S.insert(s);
+	conditions.push_back(S);
 }
 
 void Transition::inhibit(const astate_p as){
@@ -473,7 +497,9 @@ void Transition::inhibit(const astate_p as){
 		active_conditions = false;
 		conditions.clear();
 	}
-	conditions.insert(State(as));
+	std::set<State> S;
+	S.insert(State(as));
+	conditions.push_back(S);
 }
 
 void Transition::inhibit(std::initializer_list<astate_p> as){
@@ -481,7 +507,9 @@ void Transition::inhibit(std::initializer_list<astate_p> as){
 		active_conditions = false;
 		conditions.clear();
 	}
-	conditions.insert(State(as));
+	std::set<State> S;
+	S.insert(State(as));
+	conditions.push_back(S);
 }
 
 //-----------------------------------------------------------------------------
@@ -551,7 +579,7 @@ std::list<std::string> StateModel::find_path(const State from, const State to, u
 		/* find unvisited vertex with min cost */
 		double cost = std::numeric_limits<double>::max();
 		for(auto& kv : cost_map){
-			if(visited_states.find(kv.first) == visited_states.end()){
+			if(visited_states.find(kv.first) == visited_states.end() && kv.second < cost){
 				u = kv.first;
 				cost = kv.second;
 			}
@@ -772,6 +800,11 @@ std::list<State> StateMachine::move(std::string input){
 
 State StateMachine::get_state(){
 	return current_state;
+}
+
+
+std::list<std::string> StateMachine::find_path(const State to, unsigned int restriction){
+	return StateModel::find_path(current_state, to, restriction);
 }
 
 } // namespace cerebellum
