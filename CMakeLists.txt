@@ -68,20 +68,20 @@ target_include_directories(catch2
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/test>
 )
 
-add_executable(test src/test/test.cxx)
-target_link_libraries(test cerebellum)
-target_link_libraries(test catch2)
+add_executable(test_cb src/test/test.cxx)
+target_link_libraries(test_cb cerebellum)
+target_link_libraries(test_cb catch2)
 
 if(MSVC)
 	# using MSVC
-	target_compile_options(app PRIVATE /EHsc /W3 /WX)
+	target_compile_options(test_cb PRIVATE /EHsc /W3 /WX)
 else()
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 		# using Clang
-		target_compile_options(app PRIVATE -Werror -Wall -Wextra)
+		target_compile_options(test_cb PRIVATE -Werror -Wall -Wextra)
 	elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		# using GCC
-		target_compile_options(app PRIVATE -Werror -Wall -Wextra -pedantic)
+		target_compile_options(test_cb PRIVATE -Werror -Wall -Wextra -pedantic)
 	endif()
 endif()
 

@@ -298,6 +298,9 @@ void example2(){
 	cout << "Case 6 : ";
 	print_path(model.find_path({af, nd, x1, f0}, {ag}));
 
+	cout << "Case 7 : ";
+	print_path(model.find_path_around({af, nd, x2, f4}, {ag}, {{x3}, {xa}}));
+
 	/** test an instance of this model as a state machine **/
 	StateMachine uav(model, State({ag, nh, xh, f4}));
 	list<string> path = uav.find_path(State({ag, xd}), 0);

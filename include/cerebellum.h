@@ -36,7 +36,6 @@
 #include <utility>
 #include <algorithm>
 #include <iostream>
-#include <sstream>
 
 namespace cerebellum {
 
@@ -83,8 +82,6 @@ public:
 
 	virtual ~State() = default;
 
-	std::vector<astate_p> components;
-
 	bool empty() const;
 
 	int dimension() const;
@@ -106,6 +103,8 @@ public:
 	friend std::ostream& operator<<(std::ostream& os, const State&);
 
 protected:
+
+	std::vector<astate_p> components;
 
 };
 
@@ -192,6 +191,15 @@ public:
 	const std::set<transition_p> transitions;
 
 	std::list<std::string> find_path(const State from, const State to, 
+				unsigned int restriction = std::numeric_limits<unsigned int>::max());
+
+	std::list<std::string> find_path_around(const State from, const State to, const State avoid,
+				unsigned int restriction = std::numeric_limits<unsigned int>::max());
+
+	std::list<std::string> find_path_around(const State from, const State to, std::vector<State> avoid,
+				unsigned int restriction = std::numeric_limits<unsigned int>::max());
+
+	std::list<std::string> find_path_around(const State from, const State to, std::initializer_list<State> avoid,
 				unsigned int restriction = std::numeric_limits<unsigned int>::max());
 
 protected:
@@ -549,8 +557,9 @@ transitions(b.transitions)
 
 }
 
-std::list<std::string> StateModel::find_path(const State from, const State to, unsigned int restriction){
-	
+std::list<std::string> StateModel::find_path_around(const State from, const State to, 
+											std::vector<State> avoid, unsigned int restriction){
+
 	std::list<std::string> path;
 
 	if(from.dimension() < to.dimension()){
@@ -616,15 +625,22 @@ std::list<std::string> StateModel::find_path(const State from, const State to, u
 				tcost += nt->cost;
 			}
 
-			/* add the neighbors to the known state set */
-			known_states.insert(nu);
+			/* check if this state needs to be avoided */
+			bool to_avoid = false;
+			for(State obst : avoid){
+				to_avoid |= nu.contains(obst);
+			}
+			if(!to_avoid){
+				/* add the neighbors to the known state set */
+				known_states.insert(nu);
 
-			/* see if this is a better path to reach nu */
-			double ncost = cost + tcost;
-			auto it = cost_map.find(nu);
-			if(it == cost_map.end() || (it != cost_map.end() && ncost < it->second)){
-				cost_map[nu] = ncost;
-				trans_map[nu] = std::make_pair(tb, t_natural);
+				/* see if this is a better path to reach nu */
+				double ncost = cost + tcost;
+				auto it = cost_map.find(nu);
+				if(it == cost_map.end() || (it != cost_map.end() && ncost < it->second)){
+					cost_map[nu] = ncost;
+					trans_map[nu] = std::make_pair(tb, t_natural);
+				}
 			}
 		}
 	}
@@ -650,6 +666,24 @@ std::list<std::string> StateModel::find_path(const State from, const State to, u
 	}
 
 	return path;
+}
+
+std::list<std::string> StateModel::find_path_around(const State from, const State to, 
+											const State avoid, unsigned int restriction){
+	std::vector<State> avoids;
+	avoids.push_back(avoid);
+	return find_path_around(from, to, avoids, restriction);
+}
+
+std::list<std::string> StateModel::find_path_around(const State from, const State to, 
+											std::initializer_list<State> avoid, unsigned int restriction){
+	std::vector<State> avoids(avoid.begin(), avoid.end());
+	return find_path_around(from, to, avoids, restriction);
+}
+
+std::list<std::string> StateModel::find_path(const State from, const State to, unsigned int restriction){
+	std::vector<State> avoids;
+	return find_path_around(from, to, avoids, restriction);
 }
 
 std::map<std::string, std::set<transition_p>> StateModel::all_transitions_from(const State from){
