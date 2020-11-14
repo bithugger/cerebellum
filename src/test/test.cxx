@@ -26,6 +26,7 @@
 
 #include <cerebellum.h>
 #include <catch.hpp>
+#include <iostream>
 
 using namespace std;
 using namespace cerebellum;
@@ -167,4 +168,45 @@ TEST_CASE("Transition logic", "[Transition]"){
 
 TEST_CASE("State model logic", "[StateModel]"){
 
+}
+
+TEST_CASE("Data state logic", "[DataState]"){
+	SECTION("Data state sanity"){
+		DataSource water = DataModel::create_source("water", 0, 10);
+		dstate_p water1 = water->value_at(1);
+		dstate_p water2 = water->value_at(2);
+		dstate_p waters = water->value_lt(2);
+		astate_p wc = water1;
+
+		REQUIRE( water1->is_subset(water1) );
+		REQUIRE( !water1->is_subset(water2) );
+		REQUIRE( water1->is_subset(waters) );
+		REQUIRE( !water2->is_subset(waters) );
+		REQUIRE( waters->is_subset(waters) );
+	}
+
+	SECTION("Data state contains"){
+		DataSource fs = DataModel::create_source("fuel", 0, 10);
+		astate_p f2 = fs->value_at(2);
+		astate_p f3 = fs->value_at(3);
+		astate_p fl3 = fs->value_lt(3);
+		astate_p a = AtomicState::create("a");
+		astate_p b = AtomicState::create("b");
+		State A2({a, f2});
+		State A3({a, f3});
+		State A({a});
+		State Al3({a, fl3});
+
+		REQUIRE( A2.contains(A) );
+		REQUIRE( A3.contains(A) );
+		REQUIRE( Al3.contains(A) );
+		REQUIRE( A2.contains(Al3) );
+		REQUIRE( !A3.contains(Al3) );
+		REQUIRE( !A3.contains(A2) );
+		REQUIRE( !A2.contains(A3) );
+		REQUIRE( !A.contains(A3) );
+		REQUIRE( !Al3.contains(A3) );
+		REQUIRE( !A.contains(A2) );
+		REQUIRE( !Al3.contains(A2) );
+	}
 }

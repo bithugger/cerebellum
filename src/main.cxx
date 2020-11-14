@@ -46,9 +46,7 @@ void example1(){
 	cout << "Elevator model control:" << endl;
 
 	/* floor states, 3 floors */
-	astate_p f1 = AtomicState::create("floor_1");
-	astate_p f2 = AtomicState::create("floor_2");
-	astate_p f3 = AtomicState::create("floor_3");
+	DataSource floors = DataModel::create_source("floor", 1, 3);
 
 	/* motion state: moving up, stopped, moving down */
 	astate_p mu = AtomicState::create("moving_up");
@@ -60,14 +58,10 @@ void example1(){
 	astate_p da = AtomicState::create("door_open");
 
 	/* floor transition */
-	transition_p f1f2 = Transition::create_natural("moved_from_floor_1_to_floor_2", f1, f2);
-	f1f2->activate(mu);
-	transition_p f2f1 = Transition::create_natural("moved_from_floor_2_to_floor_1", f2, f1);
-	f2f1->activate(md);
-	transition_p f2f3 = Transition::create_natural("moved_from_floor_2_to_floor_3", f2, f3);
-	f2f3->activate(mu);
-	transition_p f3f2 = Transition::create_natural("moved_from_floor_3_to_floor_2", f3, f2);
-	f3f2->activate(md);
+	transition_p climbed = Transition::create_natural("climbed_floor", floors->value_any(), floors->value_change(1));
+	climbed->activate(mu);
+	transition_p descended = Transition::create_natural("descended_floor", floors->value_any(), floors->value_change(-1));
+	descended->activate(md);
 
 	/* motion transitions */
 	transition_p msmu = Transition::create_controlled("start_ascending", ms, mu);
@@ -80,8 +74,8 @@ void example1(){
 	transition_p mdmd = Transition::create_controlled("continue_descending", md, md);
 	
 	/* privileged motion transitions */
-	transition_p msmup = Transition::create_controlled("start_ascending_privileged", ms, mu, 1, 1);
-	transition_p msmdp = Transition::create_controlled("stop_ascending_privileged", ms, md, 1, 1);
+	transition_p msmup = Transition::create_controlled("start_ascending_privileged", ms, mu, 5, 1);
+	transition_p msmdp = Transition::create_controlled("stop_ascending_privileged", ms, md, 5, 1);
 
 	/* door transitions */
 	transition_p dcda = Transition::create_controlled("open_door", dc, da);
@@ -92,10 +86,9 @@ void example1(){
 	dadc->inhibit(md);
 
 	/** state model with all atomic states and transitions **/
-	StateModel model({f1, f2, f3, mu, ms, md, dc, da}, 
-		{f1f2, f2f1, f2f3, f3f2, msmu, mums, msmd, mdms, mumu, mdmd, dcda, dadc,
+	StateModel model({floors->value_any(), mu, ms, md, dc, da}, 
+		{climbed, descended, msmu, mums, msmd, mdms, mumu, mdmd, dcda, dadc,
 		 msmup, msmdp});
-
 
 	/** test the path finding algorithm **/
 	list<string> path;
@@ -103,7 +96,7 @@ void example1(){
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 3, stopped, door open */
 	/* privilege level 0 */
-	path = model.find_path(State({f1, ms, da}), State({f3, ms, da}), 0);
+	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}), 0);
 	/* print */
 	cout << "Case 1 : ";
 	print_path(path);
@@ -111,7 +104,7 @@ void example1(){
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 2, moving up, door open */
 	/* privilege level 0, no path should exist */
-	path = model.find_path(State({f1, ms, da}), State({f2, mu, da}), 0);
+	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(2), mu, da}), 0);
 	/* print */
 	cout << "Case 2 : ";
 	print_path(path);
@@ -119,7 +112,7 @@ void example1(){
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 3, stopped, door open */
 	/* privilege level unlimited */
-	path = model.find_path(State({f1, ms, da}), State({f3, ms, da}));
+	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}));
 	/* print */
 	cout << "Case 3 : ";
 	print_path(path);
@@ -127,7 +120,7 @@ void example1(){
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 2, moving up, door open */
 	/* privilege level unlimited */
-	path = model.find_path(State({f1, ms, da}), State({f2, mu, da}));
+	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(2), mu, da}));
 	/* print */
 	cout << "Case 4 : ";
 	print_path(path);
@@ -135,7 +128,7 @@ void example1(){
 	/* find a path from state floor 3, stopped, door open, to
 	 * state set floor 1, stopped */
 	/* privilege level 0 */
-	path = model.find_path(State({f3, ms, da}), State({f1, ms}), 0);
+	path = model.find_path(State({floors->value_at(3), ms, da}), State({floors->value_at(1), ms}), 0);
 	/* print */
 	cout << "Case 5 : ";
 	print_path(path);
@@ -143,16 +136,16 @@ void example1(){
 	/* find a path from state floor 3, stopped, door open, to
 	 * state set floor 1 */
 	/* privilege level 0 */
-	path = model.find_path(State({f3, ms, da}), State({f1}), 0);
+	path = model.find_path(State({floors->value_at(3), ms, da}), State({floors->value_at(1)}), 0);
 	/* print */
 	cout << "Case 6 : ";
 	print_path(path);
 
 	/** test an instance of this model as a state machine **/
 	/* initial state floor 1, stopped, door open */
-	StateMachine sm(model, State({f1, ms, da}));
+	StateMachine sm(model, State({floors->value_at(1), ms, da}));
 	/* find path to state floor 3, stopped, door open */
-	path = sm.find_path(State({f3, ms, da}), 0);
+	path = sm.find_path(State({floors->value_at(3), ms, da}), 0);
 	/* apply the inputs to the state machine, print all intermediate states */
 	cout << "Case 1 state flow :" << endl;
 	for(const string& s : path){
@@ -177,12 +170,8 @@ void example2(){
 	astate_p ag = AtomicState::create("landed");
 	astate_p ac = AtomicState::create("crashed");
 
-	/* fuel states */
-	astate_p f4 = AtomicState::create("fuel_4");
-	astate_p f3 = AtomicState::create("fuel_3");
-	astate_p f2 = AtomicState::create("fuel_2");
-	astate_p f1 = AtomicState::create("fuel_1");
-	astate_p f0 = AtomicState::create("fuel_0");
+	/* fuel state */
+	DataSource fuel = DataModel::create_source("fuel", 0, 5);
 
 	/* location state */
 	astate_p xh = AtomicState::create("at_home"); // home
@@ -197,7 +186,7 @@ void example2(){
 	astate_p nd = AtomicState::create("to_destination");
 	astate_p na = AtomicState::create("to_alternate");
 
-	vector<astate_p> all_states({af, ag, ac, f4, f3, f2, f1, f0, xh, x1, x2, x3, xa, xd, nh, nd, na});
+	vector<astate_p> all_states({af, ag, ac, fuel->value_any(), xh, x1, x2, x3, xa, xd, nh, nd, na});
 
 	/** Transitions **/
 	/* flying states */
@@ -208,23 +197,17 @@ void example2(){
 	transition_p eland = Transition::create_controlled("emergency_land", af, ag, 30, 1);
 
 	transition_p fly = Transition::create_controlled("fly", af, af);
-	fly->inhibit(f0); // cannot remain flying without fuel
+	fly->inhibit(fuel->value_leq(0)); // cannot remain flying without fuel
 
 	transition_p takeoff = Transition::create_controlled("takeoff", ag, af);
-	takeoff->inhibit(f0); // cannot takeoff without fuel
+	takeoff->inhibit(fuel->value_leq(0)); // cannot takeoff without fuel
 
 	transition_p crash = Transition::create_natural("crash", af, ac);
-	crash->activate(f0); // automatically crash when out of fuel
+	crash->activate(fuel->value_leq(0)); // automatically crash when out of fuel
 
 	/* fuel states */
-	transition_p fuel_burn_4 = Transition::create_natural("fuel_burnt", f4, f3, 10);
-	transition_p fuel_burn_3 = Transition::create_natural("fuel_burnt", f3, f2, 10);
-	transition_p fuel_burn_2 = Transition::create_natural("fuel_burnt", f2, f1, 10);
-	transition_p fuel_burn_1 = Transition::create_natural("fuel_burnt", f1, f0, 10);
-	fuel_burn_4->activate(af); // fuel consumed while flying
-	fuel_burn_3->activate(af);
-	fuel_burn_2->activate(af);
-	fuel_burn_1->activate(af);
+	transition_p fuel_burn = Transition::create_natural("fuel_burnt", fuel->value_any(), fuel->value_change(-1), 10);
+	fuel_burn->activate(af); // fuel consumed while flying
 
 	/* natural location transitions */
 	/* map like so
@@ -273,36 +256,35 @@ void example2(){
 	transition_p na_nd = Transition::create_controlled("alt_to_dest", na, nd, 2);
 	transition_p nd_na = Transition::create_controlled("dest_to_alt", nd, na, 2);
 
-	vector<transition_p> all_transitions({land, takeoff, fly, eland, crash,
-		fuel_burn_4, fuel_burn_3, fuel_burn_2, fuel_burn_1, 
+	vector<transition_p> all_transitions({land, takeoff, fly, eland, crash, fuel_burn,
 		xh_x1, x1_xh, x1_x2, x2_x1, x2_xa, xa_x2, x2_x3, x3_x2, x3_xd, xd_x3, 
 		nd_nh, nh_nd, na_nh, nh_na, na_nd, nd_na});
 
 	StateModel model(all_states, all_transitions);
 
 	cout << "Case 1 : ";
-	print_path(model.find_path({ag, na, x2, f2}, {ag, xd}, 0));
+	print_path(model.find_path({ag, na, x2, fuel->value_at(2)}, {ag, xd}, 0));
 
 	cout << "Case 2 : ";
-	print_path(model.find_path({ag, nh, xh, f4}, {ag, xd}, 0));
+	print_path(model.find_path({ag, nh, xh, fuel->value_at(4)}, {ag, xd}, 0));
 
 	cout << "Case 3 : ";
-	print_path(model.find_path({af, nd, x1, f1}, {ag}, 0));
+	print_path(model.find_path({af, nd, x1, fuel->value_at(1)}, {ag}, 0));
 
 	cout << "Case 4 : ";
-	print_path(model.find_path({af, nd, x2, f1}, {ag}, 0));
+	print_path(model.find_path({af, nd, x2, fuel->value_at(1)}, {ag}, 0));
 
 	cout << "Case 5 : ";
-	print_path(model.find_path({af, nd, x3, f1}, {ag}, 0));
+	print_path(model.find_path({af, nd, x3, fuel->value_at(1)}, {ag}, 0));
 
 	cout << "Case 6 : ";
-	print_path(model.find_path({af, nd, x1, f0}, {ag}));
+	print_path(model.find_path({af, nd, x1, fuel->value_at(0)}, {ag}));
 
 	cout << "Case 7 : ";
-	print_path(model.find_path_around({af, nd, x2, f4}, {ag}, {{x3}, {xa}}));
+	print_path(model.find_path_around({af, nd, x2, fuel->value_at(4)}, {ag}, {{x3}, {xa}}));
 
 	/** test an instance of this model as a state machine **/
-	StateMachine uav(model, State({ag, nh, xh, f4}));
+	StateMachine uav(model, State({ag, nh, xh, fuel->value_at(4)}));
 	list<string> path = uav.find_path(State({ag, xd}), 0);
 	cout << "Case 2 state flow :" << endl;
 	for(const string& s : path){

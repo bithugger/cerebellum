@@ -36,6 +36,7 @@
 #include <utility>
 #include <algorithm>
 #include <iostream>
+#include <typeinfo>
 
 namespace cerebellum {
 
@@ -105,6 +106,7 @@ public:
 protected:
 
 	std::vector<astate_p> components;
+	friend class Transition;
 
 };
 
@@ -241,6 +243,80 @@ protected:
 
 };
 
+//-----------------------------------------------------------------------------
+// Data State
+//-----------------------------------------------------------------------------
+
+class DataState;
+typedef std::shared_ptr<DataState> dstate_p;
+class DataModel;
+typedef std::shared_ptr<DataModel> DataSource;
+
+class DataState : public AtomicState {
+
+public:
+
+	const DataSource source;
+	const enum Qualifier {
+		EQUALS = 0,
+		NOT_EQUALS,
+		LESS_THAN,
+		LESS_THAN_EQUALS,
+		GREATER_THAN,
+		GREATER_THAN_EQUALS,
+		NONE
+	} qualifier;
+	const int value;
+
+	bool is_subset(const DataState&) const;
+	bool is_subset(const dstate_p) const;
+
+protected:
+
+	DataState(const DataSource, Qualifier, int);
+	friend class DataModel;
+
+};
+
+//-----------------------------------------------------------------------------
+// Data Model
+//-----------------------------------------------------------------------------
+
+class DataModel : public std::enable_shared_from_this<DataModel> {
+
+public:
+
+	static DataSource create_source(std::string);
+	static DataSource create_source(std::string, int ub, int lb);
+	
+	const std::string name;
+	const int lower_bound;
+	const int upper_bound;
+
+	/* states */
+	dstate_p value_at(int);
+
+	/* conditions */
+	dstate_p value_eq(int);
+	dstate_p value_lt(int);
+	dstate_p value_gt(int);
+	dstate_p value_neq(int);
+	dstate_p value_leq(int);
+	dstate_p value_geq(int);
+
+	/* transitions */
+	dstate_p value_any();
+	dstate_p value_change(int);
+
+protected:
+
+	DataModel(std::string, int, int);
+
+};
+
+inline bool operator==(const astate_p& x, const astate_p& y);
+inline bool operator<(const astate_p& x, const astate_p& y);
+
 //=============================================================================
 // Implementation
 //=============================================================================
@@ -255,7 +331,6 @@ output(output)
 astate_p AtomicState::create(std::string s){
 	return astate_p(new AtomicState(s, s));
 }
-
 
 std::ostream& operator<<(std::ostream& os, const AtomicState& a){
 	return os << a.label;
@@ -296,15 +371,27 @@ int State::dimension() const {
 }
 
 bool State::contains(const astate_p x) const {
-	return std::find(components.begin(), components.end(), x) != components.end();
+	if(typeid(*x) == typeid(DataState)){
+		return std::find_if(components.begin(), components.end(), [&](const astate_p y){
+			if(typeid(*y) == typeid(DataState)){
+				DataState& xx = static_cast<DataState&>(*x);
+				DataState& yy = static_cast<DataState&>(*y); 
+				return yy.is_subset(xx);
+			}else{
+				return false;
+			}
+		}) != components.end();
+	}else{
+		return std::find(components.begin(), components.end(), x) != components.end();		
+	}
 }
 
 bool State::contains(std::vector<astate_p> X) const {
-	std::vector<astate_p> a = components;
-	std::vector<astate_p> b = X;
-	std::sort(a.begin(), a.end());
-	std::sort(b.begin(), b.end());
-	return std::includes(a.begin(), a.end(), b.begin(), b.end());
+	bool yes = true;
+	for(astate_p x : X){
+		yes &= contains(x);
+	}
+	return yes;
 }
 
 bool State::contains(const State& s) const {
@@ -349,8 +436,23 @@ State State::move(const transition_p t) const {
 
 		std::vector<astate_p> new_components = components;
 		for(auto ft : changes){
-			auto it = std::find(new_components.begin(), new_components.end(), ft.first);
-			*it = ft.second;
+			if(typeid(*ft.first) == typeid(DataState)){
+				DataState& xx = static_cast<DataState&>(*ft.first);
+				auto it = std::find_if(new_components.begin(), new_components.end(), [&](const astate_p y){
+					if(typeid(*y) == typeid(DataState)){
+						DataState& yy = static_cast<DataState&>(*y); 
+						return yy.is_subset(xx);
+					}else{
+						return false;
+					}
+				});
+				DataState& yy = static_cast<DataState&>(*(*it));
+				DataState& zz = static_cast<DataState&>(*ft.second);
+				*it = yy.source->value_at(yy.value + zz.value);
+			}else{
+				auto it = std::find(new_components.begin(), new_components.end(), ft.first);
+				*it = ft.second;	
+			}
 		}
 		return State(new_components);
 	}else{
@@ -367,8 +469,23 @@ State State::move_back(const transition_p t) const {
 
 		std::vector<astate_p> new_components = components;
 		for(auto ft : changes){
-			auto it = std::find(new_components.begin(), new_components.end(), ft.second);
-			*it = ft.first;
+			if(typeid(*ft.first) == typeid(DataState)){
+				DataState& xx = static_cast<DataState&>(*ft.first);
+				auto it = std::find_if(new_components.begin(), new_components.end(), [&](const astate_p y){
+					if(typeid(*y) == typeid(DataState)){
+						DataState& yy = static_cast<DataState&>(*y); 
+						return yy.is_subset(xx);
+					}else{
+						return false;
+					}
+				});
+				DataState& yy = static_cast<DataState&>(*(*it));
+				DataState& zz = static_cast<DataState&>(*ft.second);
+				*it = yy.source->value_at(yy.value - zz.value);
+			}else{
+				auto it = std::find(new_components.begin(), new_components.end(), ft.second);
+				*it = ft.first;
+			}
 		}
 		return State(new_components);
 	}else{
@@ -454,6 +571,32 @@ bool Transition::available_at(const State& x) const {
 			pass |= sat;
 		}else{
 			pass &= !sat;
+		}
+	}
+
+	/* check data state saturation */
+	std::vector<std::pair<astate_p, astate_p>> changes;
+	for(int i = 0; i < from.dimension(); i++){
+		changes.push_back(std::make_pair(from.components[i], to.components[i]));
+	}
+
+	for(std::pair<astate_p, astate_p> change : changes){
+		const astate_p f = change.first;
+		const astate_p t = change.second;
+
+		if(typeid(*f) == typeid(DataState)){
+			DataState& ff = static_cast<DataState&>(*f);
+			for(const astate_p a : x.components){
+				if(typeid(*a) == typeid(DataState)){
+					DataState& aa = static_cast<DataState&>(*a);
+					if(aa.is_subset(ff)){
+						DataState& bb = static_cast<DataState&>(*t);
+						int v = aa.value + bb.value;
+						pass &= (v <= ff.source->upper_bound);
+						pass &= (v >= ff.source->lower_bound);
+					}
+				}
+			}
 		}
 	}
 
@@ -840,6 +983,218 @@ State StateMachine::get_state(){
 std::list<std::string> StateMachine::find_path(const State to, unsigned int restriction){
 	return StateModel::find_path(current_state, to, restriction);
 }
+
+//-----------------------------------------------------------------------------
+
+std::vector<std::string> qualifier_names({"=", "!=", "<", ">", "<=", ">=", "*"});
+
+DataState::DataState(DataSource source, DataState::Qualifier qualifier, int value) :
+AtomicState("" + source->name + " " + qualifier_names[qualifier] + " " + std::to_string(value), 
+			"" + source->name + " " + qualifier_names[qualifier] + " " + std::to_string(value)),
+source(source),
+qualifier(qualifier),
+value(value)
+{
+
+}
+
+bool DataState::is_subset(const DataState& o) const {
+	if(source != o.source){
+		return false;
+	}
+
+	switch(qualifier){
+		case EQUALS:
+			switch(o.qualifier){
+				case EQUALS:
+					return value == o.value;
+				case NOT_EQUALS:
+					return value != o.value;
+				case LESS_THAN:
+					return value < o.value;
+				case GREATER_THAN:
+					return value > o.value;
+				case LESS_THAN_EQUALS:
+					return value <= o.value;
+				case GREATER_THAN_EQUALS:
+					return value >= o.value;
+				case NONE:
+					return true;
+				default:
+					return false;
+			}
+			break;
+		case NOT_EQUALS:
+			switch(o.qualifier){
+				case NOT_EQUALS:
+					return value == o.value;
+				case NONE:
+					return true;
+				default:
+					return false;
+			}
+			break;
+		case LESS_THAN:
+			switch(o.qualifier){
+				case NOT_EQUALS:
+					return value <= o.value;
+				case LESS_THAN:
+					return value <= o.value;
+				case LESS_THAN_EQUALS:
+					return value <= o.value - 1;
+				case NONE:
+					return true;
+				default:
+					return false;
+			}
+			break;
+		case GREATER_THAN:
+			switch(o.qualifier){
+				case NOT_EQUALS:
+					return value >= o.value;
+				case GREATER_THAN:
+					return value >= o.value;
+				case GREATER_THAN_EQUALS:
+					return value >= o.value + 1;
+				case NONE:
+					return true;
+				default:
+					return false;
+			}
+			break;
+		case LESS_THAN_EQUALS:
+			switch(o.qualifier){
+				case NOT_EQUALS:
+					return value < o.value;
+				case LESS_THAN:
+					return value < o.value;
+				case LESS_THAN_EQUALS:
+					return value <= o.value;
+				case NONE:
+					return true;
+				default:
+					return false;
+			}
+			break;
+		case GREATER_THAN_EQUALS:
+			switch(o.qualifier){
+				case NOT_EQUALS:
+					return value > o.value;
+				case GREATER_THAN:
+					return value > o.value;
+				case GREATER_THAN_EQUALS:
+					return value >= o.value;
+				case NONE:
+					return true;
+				default:
+					return false;
+			}
+			break;
+
+		case NONE:
+			switch(o.qualifier){
+				case NONE:
+					return true;
+				default:
+					return false;
+			}
+			break;
+		default:
+			return false;
+	}
+}
+
+bool DataState::is_subset(const dstate_p o) const {
+	return is_subset(*o);
+}
+
+//-----------------------------------------------------------------------------
+
+DataModel::DataModel(std::string name, int lb, int ub) :
+name(name),
+lower_bound(lb),
+upper_bound(ub)
+{
+
+}
+
+DataSource DataModel::create_source(std::string name){
+	return DataSource(new DataModel(name, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
+}
+
+DataSource DataModel::create_source(std::string name, int lb, int ub){
+	return DataSource(new DataModel(name, lb, ub));
+}
+
+dstate_p DataModel::value_at(int x){
+	return value_eq(x);
+}
+
+dstate_p DataModel::value_eq(int x){
+	return dstate_p(new DataState(shared_from_this(), DataState::EQUALS, x));
+}
+
+dstate_p DataModel::value_lt(int x){
+	return dstate_p(new DataState(shared_from_this(), DataState::LESS_THAN, x));
+}
+
+dstate_p DataModel::value_gt(int x){
+	return dstate_p(new DataState(shared_from_this(), DataState::GREATER_THAN, x));
+}
+
+dstate_p DataModel::value_neq(int x){
+	return dstate_p(new DataState(shared_from_this(), DataState::NOT_EQUALS, x));
+}
+
+dstate_p DataModel::value_leq(int x){
+	return dstate_p(new DataState(shared_from_this(), DataState::LESS_THAN_EQUALS, x));
+}
+
+dstate_p DataModel::value_geq(int x){
+	return dstate_p(new DataState(shared_from_this(), DataState::GREATER_THAN_EQUALS, x));
+}
+
+dstate_p DataModel::value_any(){
+	return dstate_p(new DataState(shared_from_this(), DataState::NONE, 0));
+}
+
+dstate_p DataModel::value_change(int x){
+	return dstate_p(new DataState(shared_from_this(), DataState::NONE, x));
+}
+
+//-----------------------------------------------------------------------------
+
+inline bool operator==(const astate_p& x, const astate_p& y){
+	if(typeid(*x) == typeid(DataState) && typeid(*y) == typeid(DataState)){
+		DataState& xx = static_cast<DataState&>(*x);
+		DataState& yy = static_cast<DataState&>(*y);
+		return xx.is_subset(yy) && yy.is_subset(xx);
+	}else if(typeid(*x) == typeid(DataState) || typeid(*y) == typeid(DataState)){
+		return false;
+	}else{
+		return x.get() == y.get();
+	}
+}
+
+inline bool operator<(const astate_p& x, const astate_p& y){
+	if(typeid(*x) == typeid(DataState) && typeid(*y) == typeid(DataState)){
+		DataState& xx = static_cast<DataState&>(*x);
+		DataState& yy = static_cast<DataState&>(*y);
+		if(xx.source != yy.source){
+			return xx.source < yy.source;
+		}else{
+			return xx.value < yy.value;
+		}
+	}else if(typeid(*x) == typeid(DataState)){
+		return false;
+	}else if(typeid(*y) == typeid(DataState)){
+		return true;
+	}else{
+		return x.get() < y.get();
+	}
+}
+
+//-----------------------------------------------------------------------------
 
 } // namespace cerebellum
 
