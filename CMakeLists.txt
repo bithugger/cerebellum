@@ -51,7 +51,7 @@ if(MSVC)
 else()
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 		# using Clang
-		target_compile_options(app PRIVATE -Werror -Wall -Wextra)
+		target_compile_options(app PRIVATE -Werror -Wall -Wextra -pedantic)
 	elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		# using GCC
 		target_compile_options(app PRIVATE -Werror -Wall -Wextra -pedantic)
@@ -78,7 +78,7 @@ if(MSVC)
 else()
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 		# using Clang
-		target_compile_options(test_cb PRIVATE -Werror -Wall -Wextra)
+		target_compile_options(test_cb PRIVATE -Werror -Wall -Wextra -pedantic)
 	elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		# using GCC
 		target_compile_options(test_cb PRIVATE -Werror -Wall -Wextra -pedantic)

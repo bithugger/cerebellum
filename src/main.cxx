@@ -112,7 +112,7 @@ void example1(){
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 3, stopped, door open */
 	/* privilege level unlimited */
-	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}));
+	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}), 0);
 	/* print */
 	cout << "Case 3 : ";
 	print_path(path);
@@ -247,14 +247,14 @@ void example2(){
 	xd_x3->activate({nh, af});
 
 	/* navigation transitions */
-	transition_p nd_nh = Transition::create_controlled("dest_to_home", nd, nh, 2);
-	transition_p nh_nd = Transition::create_controlled("home_to_dest", nh, nd, 2);
+	transition_p nd_nh = Transition::create_controlled("to_home", nd, nh, 2); // from dest
+	transition_p na_nh = Transition::create_controlled("to_home", na, nh, 2); // from alt
 
-	transition_p na_nh = Transition::create_controlled("alt_to_home", na, nh, 2);
-	transition_p nh_na = Transition::create_controlled("home_to_alt", nh, na, 2);
+	transition_p nh_nd = Transition::create_controlled("to_dest", nh, nd, 2); // from home
+	transition_p na_nd = Transition::create_controlled("to_dest", na, nd, 2); // from alt
 
-	transition_p na_nd = Transition::create_controlled("alt_to_dest", na, nd, 2);
-	transition_p nd_na = Transition::create_controlled("dest_to_alt", nd, na, 2);
+	transition_p nh_na = Transition::create_controlled("to_alt", nh, na, 2); // from home
+	transition_p nd_na = Transition::create_controlled("to_alt", nd, na, 2); // from dest
 
 	vector<transition_p> all_transitions({land, takeoff, fly, eland, crash, fuel_burn,
 		xh_x1, x1_xh, x1_x2, x2_x1, x2_xa, xa_x2, x2_x3, x3_x2, x3_xd, xd_x3, 

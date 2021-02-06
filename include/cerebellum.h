@@ -49,6 +49,12 @@ typedef std::shared_ptr<Transition> transition_p;
 // Atomic State
 //-----------------------------------------------------------------------------
 
+enum AtomicStateType {
+	PURE = 0,
+	INT_DATA,
+	MAX
+};
+
 class AtomicState {
 
 public:
@@ -56,6 +62,8 @@ public:
 	static astate_p create(std::string);
 
 	virtual ~AtomicState() = default;
+
+	virtual AtomicStateType type() const;
 
 	const std::string label;
 	const std::string output;
@@ -271,6 +279,8 @@ public:
 	bool is_subset(const DataState&) const;
 	bool is_subset(const dstate_p) const;
 
+	AtomicStateType type() const override;
+
 protected:
 
 	DataState(const DataSource, Qualifier, int);
@@ -332,6 +342,10 @@ astate_p AtomicState::create(std::string s){
 	return astate_p(new AtomicState(s, s));
 }
 
+AtomicStateType AtomicState::type() const {
+	return AtomicStateType::PURE;
+}
+
 std::ostream& operator<<(std::ostream& os, const AtomicState& a){
 	return os << a.label;
 }
@@ -371,9 +385,9 @@ int State::dimension() const {
 }
 
 bool State::contains(const astate_p x) const {
-	if(typeid(*x) == typeid(DataState)){
+	if(x->type() == AtomicStateType::INT_DATA){
 		return std::find_if(components.begin(), components.end(), [&](const astate_p y){
-			if(typeid(*y) == typeid(DataState)){
+			if(y->type() == AtomicStateType::INT_DATA){
 				DataState& xx = static_cast<DataState&>(*x);
 				DataState& yy = static_cast<DataState&>(*y); 
 				return yy.is_subset(xx);
@@ -436,10 +450,10 @@ State State::move(const transition_p t) const {
 
 		std::vector<astate_p> new_components = components;
 		for(auto ft : changes){
-			if(typeid(*ft.first) == typeid(DataState)){
+			if(ft.first->type() == AtomicStateType::INT_DATA){
 				DataState& xx = static_cast<DataState&>(*ft.first);
 				auto it = std::find_if(new_components.begin(), new_components.end(), [&](const astate_p y){
-					if(typeid(*y) == typeid(DataState)){
+					if(y->type() == AtomicStateType::INT_DATA){
 						DataState& yy = static_cast<DataState&>(*y); 
 						return yy.is_subset(xx);
 					}else{
@@ -469,10 +483,10 @@ State State::move_back(const transition_p t) const {
 
 		std::vector<astate_p> new_components = components;
 		for(auto ft : changes){
-			if(typeid(*ft.first) == typeid(DataState)){
+			if(ft.first->type() == AtomicStateType::INT_DATA){
 				DataState& xx = static_cast<DataState&>(*ft.first);
 				auto it = std::find_if(new_components.begin(), new_components.end(), [&](const astate_p y){
-					if(typeid(*y) == typeid(DataState)){
+					if(y->type() == AtomicStateType::INT_DATA){
 						DataState& yy = static_cast<DataState&>(*y); 
 						return yy.is_subset(xx);
 					}else{
@@ -584,10 +598,10 @@ bool Transition::available_at(const State& x) const {
 		const astate_p f = change.first;
 		const astate_p t = change.second;
 
-		if(typeid(*f) == typeid(DataState)){
+		if(f->type() == AtomicStateType::INT_DATA){
 			DataState& ff = static_cast<DataState&>(*f);
 			for(const astate_p a : x.components){
-				if(typeid(*a) == typeid(DataState)){
+				if(a->type() == AtomicStateType::INT_DATA){
 					DataState& aa = static_cast<DataState&>(*a);
 					if(aa.is_subset(ff)){
 						DataState& bb = static_cast<DataState&>(*t);
@@ -1108,6 +1122,10 @@ bool DataState::is_subset(const dstate_p o) const {
 	return is_subset(*o);
 }
 
+AtomicStateType DataState::type() const {
+	return AtomicStateType::INT_DATA;
+}
+
 //-----------------------------------------------------------------------------
 
 DataModel::DataModel(std::string name, int lb, int ub) :
@@ -1165,11 +1183,11 @@ dstate_p DataModel::value_change(int x){
 //-----------------------------------------------------------------------------
 
 inline bool operator==(const astate_p& x, const astate_p& y){
-	if(typeid(*x) == typeid(DataState) && typeid(*y) == typeid(DataState)){
+	if(x->type() == AtomicStateType::INT_DATA && y->type() == AtomicStateType::INT_DATA){
 		DataState& xx = static_cast<DataState&>(*x);
 		DataState& yy = static_cast<DataState&>(*y);
 		return xx.is_subset(yy) && yy.is_subset(xx);
-	}else if(typeid(*x) == typeid(DataState) || typeid(*y) == typeid(DataState)){
+	}else if(x->type() == AtomicStateType::INT_DATA || y->type() == AtomicStateType::INT_DATA){
 		return false;
 	}else{
 		return x.get() == y.get();
@@ -1177,7 +1195,7 @@ inline bool operator==(const astate_p& x, const astate_p& y){
 }
 
 inline bool operator<(const astate_p& x, const astate_p& y){
-	if(typeid(*x) == typeid(DataState) && typeid(*y) == typeid(DataState)){
+	if(x->type() == AtomicStateType::INT_DATA && y->type() == AtomicStateType::INT_DATA){
 		DataState& xx = static_cast<DataState&>(*x);
 		DataState& yy = static_cast<DataState&>(*y);
 		if(xx.source != yy.source){
@@ -1185,9 +1203,9 @@ inline bool operator<(const astate_p& x, const astate_p& y){
 		}else{
 			return xx.value < yy.value;
 		}
-	}else if(typeid(*x) == typeid(DataState)){
+	}else if(x->type() == AtomicStateType::INT_DATA){
 		return false;
-	}else if(typeid(*y) == typeid(DataState)){
+	}else if(y->type() == AtomicStateType::INT_DATA){
 		return true;
 	}else{
 		return x.get() < y.get();
