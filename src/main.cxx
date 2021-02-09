@@ -29,16 +29,22 @@
 using namespace cerebellum;
 using namespace std;
 
-void print_path(list<string> path){
+void print_path(Path path){
 	size_t i = 0;
-	for(auto it = path.begin(); it != path.end(); it++){
-		cout << (*it);
-		i++;
-		if(i < path.size()){
-			cout << ", ";
+	for(auto it = path.transitions.begin(); it != path.transitions.end(); it++){
+		transition_p t = *it;
+		if(t->type == Transition::CONTROLLED){
+			cout << "<" << t->label << ">";
+		}else if(t->type == Transition::NATURAL){
+			cout << "[" << t->label << "]";
+		}else{
+			cout << t->label;
 		}
+
+		cout << " ";
+		i++;
 	}
-	cout << endl;
+	cout << ":: level = " << path.level << ", cost = " << path.cost << endl;
 }
 
 /** Example 1: elevator model control **/
@@ -66,16 +72,16 @@ void example1(){
 	/* motion transitions */
 	transition_p msmu = Transition::create_controlled("start_ascending", ms, mu);
 	msmu->inhibit(da);
-	transition_p mums = Transition::create_controlled("stop_ascending", mu, ms);
+	transition_p mums = Transition::create_controlled("stop", mu, ms);
 	transition_p msmd = Transition::create_controlled("start_descending", ms, md);
 	msmd->inhibit(da);
-	transition_p mdms = Transition::create_controlled("stop_descending", md, ms);
+	transition_p mdms = Transition::create_controlled("stop", md, ms);
 	transition_p mumu = Transition::create_controlled("continue_ascending", mu, mu);
 	transition_p mdmd = Transition::create_controlled("continue_descending", md, md);
 	
 	/* privileged motion transitions */
 	transition_p msmup = Transition::create_controlled("start_ascending_privileged", ms, mu, 5, 1);
-	transition_p msmdp = Transition::create_controlled("stop_ascending_privileged", ms, md, 5, 1);
+	transition_p msmdp = Transition::create_controlled("start_descending_privileged", ms, md, 5, 1);
 
 	/* door transitions */
 	transition_p dcda = Transition::create_controlled("open_door", dc, da);
@@ -91,7 +97,7 @@ void example1(){
 		 msmup, msmdp});
 
 	/** test the path finding algorithm **/
-	list<string> path;
+	Path path;
 
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 3, stopped, door open */
@@ -148,7 +154,7 @@ void example1(){
 	path = sm.find_path(State({floors->value_at(3), ms, da}), 0);
 	/* apply the inputs to the state machine, print all intermediate states */
 	cout << "Case 1 state flow :" << endl;
-	for(const string& s : path){
+	for(const string& s : path.inputs){
 		cout << sm.get_state() << ": ";
 		cout << s << " --> ";
 		list<State> xs = sm.move(s);
@@ -158,6 +164,14 @@ void example1(){
 		cout << endl;
 	}
 	cout << endl;
+
+	/** find all possible paths from one state to another **/
+	// vector<Path> all_paths = model.find_all_paths(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}));
+	// cout << endl << "all paths" << endl;
+	// for(auto p : all_paths){
+	// 	print_path(p);
+	// 	cout << endl;
+	// }
 }
 
 /** Example 2: UAV flight director **/
@@ -285,9 +299,9 @@ void example2(){
 
 	/** test an instance of this model as a state machine **/
 	StateMachine uav(model, State({ag, nh, xh, fuel->value_at(4)}));
-	list<string> path = uav.find_path(State({ag, xd}), 0);
+	Path path = uav.find_path(State({ag, xd}), 0);
 	cout << "Case 2 state flow :" << endl;
-	for(const string& s : path){
+	for(const string& s : path.inputs){
 		cout << uav.get_state() << ": ";
 		cout << s << " --> ";
 		list<State> xs = uav.move(s);
