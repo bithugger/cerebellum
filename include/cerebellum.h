@@ -109,6 +109,10 @@ public:
 	State move(const transition_p) const;
 	State move_back(const transition_p) const;
 
+	void extend(astate_p);
+	void extend(std::vector<astate_p>);
+	void extend(std::initializer_list<astate_p>);
+
 	friend std::ostream& operator<<(std::ostream& os, const State&);
 
 protected:
@@ -210,6 +214,7 @@ public:
 	Path operator+(const Path& b) const;
 	Path operator+(transition_p t) const;
 
+	Path& operator=(const Path& b) = default;
 };
 
 //-----------------------------------------------------------------------------
@@ -222,14 +227,11 @@ class StateModel {
 
 public:
 
-	StateModel(std::vector<astate_p> states, std::vector<transition_p> transitions);
-	StateModel(std::initializer_list<astate_p> states, std::vector<transition_p> transitions);
-	StateModel(std::vector<astate_p> states, std::initializer_list<transition_p> transitions);
-	StateModel(std::initializer_list<astate_p> states, std::initializer_list<transition_p> transitions);
+	StateModel(std::vector<transition_p> transitions, bool allow_wait = true);
+	StateModel(std::initializer_list<transition_p> transitions, bool allow_wait = true);
 	StateModel(const StateModel&);
 	virtual ~StateModel() = default;
 
-	const std::set<astate_p> atomic_states;
 	const std::set<transition_p> transitions;
 
 	Path find_path(const State from, const State to, 
@@ -250,7 +252,15 @@ public:
 
 	std::vector<Path> find_all_paths_around(const State from, const State to, std::vector<State> avoid);
 
+	std::vector<Path> find_all_paths_back(const State x);
+
+	std::vector<Path> find_all_paths_back_around(const State x, const State avoid);
+
+	std::vector<Path> find_all_paths_back_around(const State x, std::vector<State> avoid);
+
 protected:
+
+	bool allow_wait;
 
 	std::map<std::string, std::set<transition_p>> all_transitions_from(const State from);
 
@@ -266,10 +276,10 @@ protected:
 	Path path_find_djikstra(const State from, const State to, 
 				std::vector<State> avoid, unsigned int restriction);
 
-	std::vector<Path> path_find_dfs(const State from, const State to, std::vector<State> avoid);
+	std::vector<Path> path_find_dfs(const State from, const State to, std::vector<State> avoid, bool back);
 
 	std::vector<Path> _recursive_dfs(const State from, const State to, std::vector<State> avoid, 
-				std::vector<State> visited, Path path_so_far);
+				std::vector<State> visited, Path path_so_far, bool back);
 
 };
 
@@ -554,6 +564,22 @@ State State::move_back(const transition_p t) const {
 	}
 }
 
+void State::extend(astate_p a){
+	components.push_back(a);
+}
+
+void State::extend(std::vector<astate_p> as){
+	for(const astate_p a : as){
+		extend(a);
+	}
+}
+
+void State::extend(std::initializer_list<astate_p> as){
+	for(const astate_p a : as){
+		extend(a);
+	}
+}
+
 std::ostream& operator<<(std::ostream& os, const State& s){
 	os << "(";
 	for(size_t i = 0; i < s.components.size(); i++){
@@ -808,37 +834,23 @@ Path Path::operator+(transition_p t) const {
 
 //-----------------------------------------------------------------------------
 
-StateModel::StateModel(std::vector<astate_p> states, std::vector<transition_p> transitions) :
-atomic_states(states.begin(), states.end()),
-transitions(transitions.begin(), transitions.end())
+StateModel::StateModel(std::vector<transition_p> transitions, bool wait) :
+transitions(transitions.begin(), transitions.end()),
+allow_wait(wait)
 {
 
 }
 
-StateModel::StateModel(std::initializer_list<astate_p> states, std::vector<transition_p> transitions) :
-atomic_states(states.begin(), states.end()),
-transitions(transitions.begin(), transitions.end())
-{
-
-}
-
-StateModel::StateModel(std::vector<astate_p> states, std::initializer_list<transition_p> transitions) :
-atomic_states(states.begin(), states.end()),
-transitions(transitions.begin(), transitions.end())
-{
-
-}
-
-StateModel::StateModel(std::initializer_list<astate_p> states, std::initializer_list<transition_p> transitions) :
-atomic_states(states.begin(), states.end()),
-transitions(transitions.begin(), transitions.end())
+StateModel::StateModel(std::initializer_list<transition_p> transitions, bool wait) :
+transitions(transitions.begin(), transitions.end()),
+allow_wait(wait)
 {
 
 }
 
 StateModel::StateModel(const StateModel& b) :
-atomic_states(b.atomic_states),
-transitions(b.transitions)
+transitions(b.transitions),
+allow_wait(b.allow_wait)
 {
 
 }
@@ -878,7 +890,23 @@ std::vector<Path> StateModel::find_all_paths_around(const State from, const Stat
 }
 
 std::vector<Path> StateModel::find_all_paths_around(const State from, const State to, std::vector<State> avoid){
-	return path_find_dfs(from, to, avoid);
+	return path_find_dfs(from, to, avoid, false);
+}
+
+
+std::vector<Path> StateModel::find_all_paths_back(const State x){
+	std::vector<State> avoids;
+	return find_all_paths_back_around(x, avoids);
+}
+
+std::vector<Path> StateModel::find_all_paths_back_around(const State x, const State avoid){
+	std::vector<State> avoids;
+	avoids.push_back(avoid);
+	return find_all_paths_back_around(x, avoid);
+}
+
+std::vector<Path> StateModel::find_all_paths_back_around(const State x, std::vector<State> avoid){
+	return path_find_dfs(x, x, avoid, true);
 }
 
 Path StateModel::path_find_djikstra(const State from, const State to, std::vector<State> avoid,
@@ -981,9 +1009,14 @@ Path StateModel::path_find_djikstra(const State from, const State to, std::vecto
 				transitions_in_path.push_front(nt);
 			}
 
-			for(const transition_p t : tb.second){
-				u = u.move_back(t);
-				transitions_in_path.push_front(t);
+			if(tb.second.empty()){
+				transition_p no_action = Transition::create_controlled("", u, u, 0, 0);
+				transitions_in_path.push_front(no_action);
+			}else{
+				for(const transition_p t : tb.second){
+					u = u.move_back(t);
+					transitions_in_path.push_front(t);
+				}
 			}
 		}
 	}
@@ -995,7 +1028,7 @@ Path StateModel::path_find_djikstra(const State from, const State to, std::vecto
 	return path;
 }
 
-std::vector<Path> StateModel::path_find_dfs(const State from, const State to, std::vector<State> avoid){
+std::vector<Path> StateModel::path_find_dfs(const State from, const State to, std::vector<State> avoid, bool back){
 	std::vector<Path> all_paths;
 
 	if(from.dimension() < to.dimension()){
@@ -1003,7 +1036,7 @@ std::vector<Path> StateModel::path_find_dfs(const State from, const State to, st
 	}else if(to.empty() || from.empty()){
 		return all_paths;
 	}else{
-		all_paths = _recursive_dfs(from, to, avoid, std::vector<State>(), Path());
+		all_paths = _recursive_dfs(from, to, avoid, std::vector<State>(), Path(), back);
 
 		std::sort(all_paths.begin(), all_paths.end());
 
@@ -1013,10 +1046,10 @@ std::vector<Path> StateModel::path_find_dfs(const State from, const State to, st
 
 
 std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, std::vector<State> avoid, 
-			std::vector<State> visited, Path path_so_far){
+			std::vector<State> visited, Path path_so_far, bool back){
 
 	std::vector<Path> paths;
-	if(from.contains(to)){
+	if(!back && from.contains(to)){
 		// reached the destination
 		// return an vector with the current path
 		paths.push_back(path_so_far);
@@ -1040,6 +1073,17 @@ std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, s
 
 			/* after arriving, apply all non-conflicting natural transitions */
 			std::set<transition_p> t_natural = prioritized_natural_transitions_from(next);
+
+			/* if allowed to wait, only do so if there are non-trivial natural transitions afterwards */
+			if(tb.second.empty()){
+				if(!t_natural.empty()){
+					transition_p no_action = Transition::create_controlled("", from, from, 0, 0);
+					inst_path += no_action;
+				}else{
+					continue;
+				}
+			}
+
 			for(const transition_p nt : t_natural){
 				next = next.move(nt);
 				inst_path += nt;
@@ -1063,7 +1107,7 @@ std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, s
 
 				/* recursion */
 				Path next_path = path_so_far + inst_path;
-				std::vector<Path> viable_paths = _recursive_dfs(next, to, avoid, next_visited, next_path);
+				std::vector<Path> viable_paths = _recursive_dfs(next, to, avoid, next_visited, next_path, false);
 
 				paths.insert(paths.end(), viable_paths.begin(), viable_paths.end());
 			}
@@ -1131,6 +1175,10 @@ std::map<std::string, std::set<transition_p>> StateModel::controlled_transitions
 				disabled[t->label] = true;
 			}
 		}
+	}
+
+	if(allow_wait){
+		tm.insert({"", std::set<transition_p>()});
 	}
 
 	return tm;

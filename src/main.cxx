@@ -72,16 +72,18 @@ void example1(){
 	/* motion transitions */
 	transition_p msmu = Transition::create_controlled("start_ascending", ms, mu);
 	msmu->inhibit(da);
+	msmu->inhibit(floors->value_geq(3));
 	transition_p mums = Transition::create_controlled("stop", mu, ms);
 	transition_p msmd = Transition::create_controlled("start_descending", ms, md);
 	msmd->inhibit(da);
+	msmd->inhibit(floors->value_leq(1));
 	transition_p mdms = Transition::create_controlled("stop", md, ms);
-	transition_p mumu = Transition::create_controlled("continue_ascending", mu, mu);
-	transition_p mdmd = Transition::create_controlled("continue_descending", md, md);
 	
 	/* privileged motion transitions */
 	transition_p msmup = Transition::create_controlled("start_ascending_privileged", ms, mu, 5, 1);
+	msmup->inhibit(floors->value_geq(3));
 	transition_p msmdp = Transition::create_controlled("start_descending_privileged", ms, md, 5, 1);
+	msmdp->inhibit(floors->value_leq(1));
 
 	/* door transitions */
 	transition_p dcda = Transition::create_controlled("open_door", dc, da);
@@ -92,9 +94,8 @@ void example1(){
 	dadc->inhibit(md);
 
 	/** state model with all atomic states and transitions **/
-	StateModel model({floors->value_any(), mu, ms, md, dc, da}, 
-		{climbed, descended, msmu, mums, msmd, mdms, mumu, mdmd, dcda, dadc,
-		 msmup, msmdp});
+	StateModel model({climbed, descended, msmu, mums, msmd, mdms, 
+		/*mumu, mdmd, */dcda, dadc, msmup, msmdp});
 
 	/** test the path finding algorithm **/
 	Path path;
@@ -200,8 +201,6 @@ void example2(){
 	astate_p nd = AtomicState::create("to_destination");
 	astate_p na = AtomicState::create("to_alternate");
 
-	vector<astate_p> all_states({af, ag, ac, fuel->value_any(), xh, x1, x2, x3, xa, xd, nh, nd, na});
-
 	/** Transitions **/
 	/* flying states */
 	transition_p land = Transition::create_controlled("land", af, ag);
@@ -209,9 +208,6 @@ void example2(){
 	land->inhibit(x2); // unless in an emergency, requiring elevated privilege
 	land->inhibit(x3);
 	transition_p eland = Transition::create_controlled("emergency_land", af, ag, 30, 1);
-
-	transition_p fly = Transition::create_controlled("fly", af, af);
-	fly->inhibit(fuel->value_leq(0)); // cannot remain flying without fuel
 
 	transition_p takeoff = Transition::create_controlled("takeoff", ag, af);
 	takeoff->inhibit(fuel->value_leq(0)); // cannot takeoff without fuel
@@ -270,11 +266,11 @@ void example2(){
 	transition_p nh_na = Transition::create_controlled("to_alt", nh, na, 2); // from home
 	transition_p nd_na = Transition::create_controlled("to_alt", nd, na, 2); // from dest
 
-	vector<transition_p> all_transitions({land, takeoff, fly, eland, crash, fuel_burn,
+	vector<transition_p> all_transitions({land, takeoff, eland, crash, fuel_burn,
 		xh_x1, x1_xh, x1_x2, x2_x1, x2_xa, xa_x2, x2_x3, x3_x2, x3_xd, xd_x3, 
 		nd_nh, nh_nd, na_nh, nh_na, na_nd, nd_na});
 
-	StateModel model(all_states, all_transitions);
+	StateModel model(all_transitions);
 
 	cout << "Case 1 : ";
 	print_path(model.find_path({ag, na, x2, fuel->value_at(2)}, {ag, xd}, 0));
