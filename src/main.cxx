@@ -44,7 +44,67 @@ void print_path(Path path){
 		cout << " ";
 		i++;
 	}
-	cout << ":: level = " << path.level << ", cost = " << path.cost << endl;
+	// cout << ":: level = " << path.level << ", cost = " << path.cost << endl;
+}
+
+void print_pathway(PathWay pathway){
+	size_t i = 0;
+	auto cyclesit = pathway.cycles.begin();
+	for(auto it = pathway.transitions.begin(); it != pathway.transitions.end(); it++){
+
+		cout << " { ";
+		for(Path cycle : *cyclesit){
+			cout << "( ";
+			print_path(cycle);
+			cout << ") ";
+		}
+		cout << "} ";
+
+		transition_p t = *it;
+		if(t->type == Transition::CONTROLLED){
+			cout << "<" << t->label << ">";
+		}else if(t->type == Transition::NATURAL){
+			cout << "[" << t->label << "]";
+		}else{
+			cout << t->label;
+		}
+
+		cyclesit++;
+		i++;
+	}
+	// cout << ":: level = " << pathway.level << ", cost = " << pathway.cost << endl;
+}
+
+/** Example 0: a toy example **/
+void example0(){
+	cout << "Toy example:" << endl;
+
+	astate_p a = AtomicState::create("a");
+	astate_p b = AtomicState::create("b");
+	astate_p c = AtomicState::create("c");
+	astate_p d = AtomicState::create("d");
+
+	transition_p tab = Transition::create_controlled("a_b", a, b);
+	transition_p tbc = Transition::create_controlled("b_c", b, c);
+	transition_p tca = Transition::create_controlled("c_a", c, a);
+	transition_p tac = Transition::create_controlled("a_c", a, c);
+	transition_p tbd = Transition::create_controlled("b_d", b, d);
+	transition_p tcd = Transition::create_controlled("c_d", c, d);
+
+	StateModel m({tab, tbc, tca, tac, tbd, tcd});
+
+	vector<Path> ps = m.find_all_paths(a, d);
+	for(Path p : ps){
+		print_path(p);
+		cout << endl;
+	}
+
+	vector<PathWay> pws = m.find_all_pathways(a, d);
+	for(PathWay pw : pws){
+		print_pathway(pw);
+		cout << endl;
+	}
+	cout << endl;
 }
 
 /** Example 1: elevator model control **/
@@ -107,6 +167,7 @@ void example1(){
 	/* print */
 	cout << "Case 1 : ";
 	print_path(path);
+	cout << endl;
 
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 2, moving up, door open */
@@ -115,6 +176,7 @@ void example1(){
 	/* print */
 	cout << "Case 2 : ";
 	print_path(path);
+	cout << endl;
 
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 3, stopped, door open */
@@ -123,6 +185,7 @@ void example1(){
 	/* print */
 	cout << "Case 3 : ";
 	print_path(path);
+	cout << endl;
 
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 2, moving up, door open */
@@ -131,6 +194,7 @@ void example1(){
 	/* print */
 	cout << "Case 4 : ";
 	print_path(path);
+	cout << endl;
 
 	/* find a path from state floor 3, stopped, door open, to
 	 * state set floor 1, stopped */
@@ -139,6 +203,7 @@ void example1(){
 	/* print */
 	cout << "Case 5 : ";
 	print_path(path);
+	cout << endl;
 
 	/* find a path from state floor 3, stopped, door open, to
 	 * state set floor 1 */
@@ -147,6 +212,7 @@ void example1(){
 	/* print */
 	cout << "Case 6 : ";
 	print_path(path);
+	cout << endl;
 
 	/** test an instance of this model as a state machine **/
 	/* initial state floor 1, stopped, door open */
@@ -164,15 +230,15 @@ void example1(){
 		}
 		cout << endl;
 	}
-	cout << endl;
 
-	/** find all possible paths from one state to another **/
-	// vector<Path> all_paths = model.find_all_paths(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}));
-	// cout << endl << "all paths" << endl;
-	// for(auto p : all_paths){
-	// 	print_path(p);
-	// 	cout << endl;
-	// }
+	/** find all possible non-looping paths from one state to another **/
+	vector<Path> all_paths = model.find_all_paths(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}));
+	cout << endl << "all paths" << endl;
+	for(auto p : all_paths){
+		print_path(p);
+		cout << endl;
+	}
+	cout << endl;
 }
 
 /** Example 2: UAV flight director **/
@@ -274,27 +340,35 @@ void example2(){
 
 	cout << "Case 1 : ";
 	print_path(model.find_path({ag, na, x2, fuel->value_at(2)}, {ag, xd}, 0));
+	cout << endl;
 
 	cout << "Case 2 : ";
 	print_path(model.find_path({ag, nh, xh, fuel->value_at(4)}, {ag, xd}, 0));
+	cout << endl;
 
 	cout << "Case 3 : ";
 	print_path(model.find_path({af, nd, x1, fuel->value_at(1)}, {ag}, 0));
+	cout << endl;
 
 	cout << "Case 4 : ";
 	print_path(model.find_path({af, nd, x2, fuel->value_at(1)}, {ag}, 0));
+	cout << endl;
 
 	cout << "Case 5 : ";
 	print_path(model.find_path({af, nd, x3, fuel->value_at(1)}, {ag}, 0));
+	cout << endl;
 
 	cout << "Case 6 : ";
 	print_path(model.find_path({af, nd, x1, fuel->value_at(0)}, {ag}));
+	cout << endl;
 
 	cout << "Case 7 : ";
 	print_path(model.find_path_around({af, nd, x2, fuel->value_at(4)}, {ag}, {{x3}, {xa}}));
+	cout << endl;
 
 	/** test an instance of this model as a state machine **/
 	StateMachine uav(model, State({ag, nh, xh, fuel->value_at(4)}));
+	uav.on_enter(State({ag, xd}), [](){ cout << "GOAL!" << endl; });
 	Path path = uav.find_path(State({ag, xd}), 0);
 	cout << "Case 2 state flow :" << endl;
 	for(const string& s : path.inputs){
@@ -311,6 +385,8 @@ void example2(){
 }
 
 int main(){
+
+	example0();
 
 	example1();
 

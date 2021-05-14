@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <iostream>
 #include <typeinfo>
+#include <functional>
 
 namespace cerebellum {
 
@@ -208,13 +209,29 @@ public:
 
 	bool operator<(const Path& b) const;
 
-	void operator+=(const Path& b);
-	void operator+=(transition_p t);
+	void operator<<=(const Path& b);
+	void operator<<=(transition_p t);
+	void operator>>=(const Path& b);
+	void operator>>=(transition_p t);
 
-	Path operator+(const Path& b) const;
-	Path operator+(transition_p t) const;
+	Path operator<<(const Path& b) const;
+	Path operator<<(transition_p t) const;
+	Path operator>>(const Path& b) const;
+	Path operator>>(transition_p t) const;
 
 	Path& operator=(const Path& b) = default;
+};
+
+//-----------------------------------------------------------------------------
+
+class PathWay : public Path{
+
+public:
+
+	PathWay();
+	virtual ~PathWay() = default;
+
+	std::list<std::vector<Path> > cycles;
 };
 
 //-----------------------------------------------------------------------------
@@ -234,6 +251,7 @@ public:
 
 	const std::set<transition_p> transitions;
 
+	/** Find single optimal path using Djikstra's algorithm **/
 	Path find_path(const State from, const State to, 
 				unsigned int restriction = std::numeric_limits<unsigned int>::max());
 
@@ -246,6 +264,7 @@ public:
 	Path find_path_around(const State from, const State to, std::initializer_list<State> avoid,
 				unsigned int restriction = std::numeric_limits<unsigned int>::max());
 
+	/** Find all simple paths using DFS **/
 	std::vector<Path> find_all_paths(const State from, const State to);
 
 	std::vector<Path> find_all_paths_around(const State from, const State to, const State avoid);
@@ -258,10 +277,18 @@ public:
 
 	std::vector<Path> find_all_paths_back_around(const State x, std::vector<State> avoid);
 
+	/** Find all pathways (simple and with cycles) using two-pass DFS **/
+	std::vector<PathWay> find_all_pathways(const State from, const State to);
+
+	std::vector<PathWay> find_all_pathways_around(const State from, const State to, const State avoid);
+
+	std::vector<PathWay> find_all_pathways_around(const State from, const State to, std::vector<State> avoid);
+
 protected:
 
 	bool allow_wait;
 
+	/** returns all enabled transitions from a given state **/
 	std::map<std::string, std::set<transition_p>> all_transitions_from(const State from);
 
 	std::map<std::string, std::set<transition_p>> natural_transitions_from(const State from);
@@ -273,13 +300,26 @@ protected:
 
 	std::set<transition_p> prioritized_natural_transitions_from(const State from);
 
+	/** returns all transitions to a given state from a state where it is enabled **/
+	std::map<std::string, std::set<transition_p>> all_transitions_to(const State to);
+
+	std::map<std::string, std::set<transition_p>> natural_transitions_to(const State to);
+
+	std::map<std::string, std::set<transition_p>> controlled_transitions_to(const State to,
+				unsigned int restriction = std::numeric_limits<unsigned int>::max());
+
+	std::map<std::string, std::set<transition_p>> external_transitions_to(const State to);
+
+	/** path finding algorithms **/
 	Path path_find_djikstra(const State from, const State to, 
 				std::vector<State> avoid, unsigned int restriction);
 
 	std::vector<Path> path_find_dfs(const State from, const State to, std::vector<State> avoid, bool back);
 
 	std::vector<Path> _recursive_dfs(const State from, const State to, std::vector<State> avoid, 
-				std::vector<State> visited, Path path_so_far, bool back);
+				std::set<State> visited, Path path_so_far, bool back);
+
+	std::vector<PathWay> pathway_find_dfs(const State from, const State to, std::vector<State> avoid);
 
 };
 
@@ -298,6 +338,9 @@ public:
 
 	State get_state();
 
+	void on_enter(const State s, std::function<void(void)> cb);
+	void on_remain(const State s, std::function<void(void)> cb);
+	void on_exit(const State s, std::function<void(void)> cb);
 
 	Path find_path(const State to, 
 				unsigned int restriction = std::numeric_limits<unsigned int>::max());
@@ -305,6 +348,11 @@ public:
 protected:
 
 	State current_state;
+	State previous_state;
+
+	std::map< State, std::vector<std::function<void(void)>> > enter_callbacks;
+	std::map< State, std::vector<std::function<void(void)>> > remain_callbacks;
+	std::map< State, std::vector<std::function<void(void)>> > exit_callbacks;
 
 };
 
@@ -519,7 +567,11 @@ State State::move(const transition_p t) const {
 				});
 				DataState& yy = static_cast<DataState&>(*(*it));
 				DataState& zz = static_cast<DataState&>(*ft.second);
-				*it = yy.source->value_at(yy.value + zz.value);
+				if(zz.qualifier == DataState::NONE){
+					*it = yy.source->value_at(yy.value + zz.value);
+				}else if(zz.qualifier == DataState::EQUALS){
+					*it = yy.source->value_at(zz.value);
+				}
 			}else{
 				auto it = std::find(new_components.begin(), new_components.end(), ft.first);
 				*it = ft.second;	
@@ -552,7 +604,11 @@ State State::move_back(const transition_p t) const {
 				});
 				DataState& yy = static_cast<DataState&>(*(*it));
 				DataState& zz = static_cast<DataState&>(*ft.second);
-				*it = yy.source->value_at(yy.value - zz.value);
+				if(zz.qualifier == DataState::NONE){
+					*it = yy.source->value_at(yy.value - zz.value);
+				}else if(zz.qualifier == DataState::EQUALS){
+					*it = yy.source->value_at(yy.value);
+				}
 			}else{
 				auto it = std::find(new_components.begin(), new_components.end(), ft.second);
 				*it = ft.first;
@@ -678,7 +734,12 @@ bool Transition::available_at(const State& x) const {
 					DataState& aa = static_cast<DataState&>(*a);
 					if(aa.is_subset(ff)){
 						DataState& bb = static_cast<DataState&>(*t);
-						int v = aa.value + bb.value;
+						int v = 0;
+						if(bb.qualifier == DataState::NONE){
+							v = aa.value + bb.value;
+						}else if(bb.qualifier == DataState::EQUALS){
+							v = bb.value;
+						}
 						pass &= (v <= ff.source->upper_bound);
 						pass &= (v >= ff.source->lower_bound);
 					}
@@ -800,13 +861,19 @@ bool Path::operator<(const Path& b) const {
 }
 
 
-void Path::operator+=(const Path& b){
+void Path::operator<<=(const Path& b){
 	for(transition_p t : b.transitions){
-		operator+=(t);
+		operator<<=(t);
 	}
 }
 
-void Path::operator+=(transition_p t){
+void Path::operator>>=(const Path& b){
+	for(auto it = b.transitions.rbegin(); it != b.transitions.rend(); **it){
+		operator>>=(*it);
+	}
+}
+
+void Path::operator<<=(transition_p t){
 	cost += t->cost;
 	probability *= t->probability;
 	if(t->level > level){
@@ -820,16 +887,52 @@ void Path::operator+=(transition_p t){
 	states.push_back(t->to);
 }
 
-Path Path::operator+(const Path& b) const {
+void Path::operator>>=(transition_p t){
+	cost += t->cost;
+	probability *= t->probability;
+	if(t->level > level){
+		level = t->level;
+	}
+
+	if(t->type == Transition::CONTROLLED){
+		inputs.push_front(t->label);
+	}
+	transitions.push_front(t);
+	states.push_front(t->to);
+}
+
+
+Path Path::operator<<(const Path& b) const {
 	Path c(*this);
-	c += b;
+	c <<= b;
 	return c;
 }
 
-Path Path::operator+(transition_p t) const {
+Path Path::operator<<(transition_p t) const {
 	Path c(*this);
-	c += t;
+	c <<= t;
 	return c;
+}
+
+Path Path::operator>>(const Path& b) const {
+	Path c(*this);
+	c >>= b;
+	return c;
+}
+
+Path Path::operator>>(transition_p t) const {
+	Path c(*this);
+	c >>= t;
+	return c;
+}
+
+//-----------------------------------------------------------------------------
+
+PathWay::PathWay() :
+Path(),
+cycles()
+{
+
 }
 
 //-----------------------------------------------------------------------------
@@ -907,6 +1010,22 @@ std::vector<Path> StateModel::find_all_paths_back_around(const State x, const St
 
 std::vector<Path> StateModel::find_all_paths_back_around(const State x, std::vector<State> avoid){
 	return path_find_dfs(x, x, avoid, true);
+}
+
+
+std::vector<PathWay> StateModel::find_all_pathways(const State from, const State to){
+	std::vector<State> avoids;
+	return find_all_pathways_around(from, to, avoids);
+}
+
+std::vector<PathWay> StateModel::find_all_pathways_around(const State from, const State to, const State avoid){
+	std::vector<State> avoids;
+	avoids.push_back(avoid);
+	return find_all_pathways_around(from, to, avoids);
+}
+
+std::vector<PathWay> StateModel::find_all_pathways_around(const State from, const State to, std::vector<State> avoid){
+	return pathway_find_dfs(from, to, avoid);
 }
 
 Path StateModel::path_find_djikstra(const State from, const State to, std::vector<State> avoid,
@@ -1022,7 +1141,7 @@ Path StateModel::path_find_djikstra(const State from, const State to, std::vecto
 	}
 
 	for(transition_p t : transitions_in_path){
-		path += t;
+		path <<= t;
 	}
 
 	return path;
@@ -1036,7 +1155,11 @@ std::vector<Path> StateModel::path_find_dfs(const State from, const State to, st
 	}else if(to.empty() || from.empty()){
 		return all_paths;
 	}else{
-		all_paths = _recursive_dfs(from, to, avoid, std::vector<State>(), Path(), back);
+		std::set<State> visited;
+		if(!back){
+			visited.insert(from);
+		}
+		all_paths = _recursive_dfs(from, to, avoid, visited, Path(), back);
 
 		std::sort(all_paths.begin(), all_paths.end());
 
@@ -1046,7 +1169,7 @@ std::vector<Path> StateModel::path_find_dfs(const State from, const State to, st
 
 
 std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, std::vector<State> avoid, 
-			std::vector<State> visited, Path path_so_far, bool back){
+			std::set<State> visited, Path path_so_far, bool back){
 
 	std::vector<Path> paths;
 	if(!back && from.contains(to)){
@@ -1065,7 +1188,7 @@ std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, s
 			/* determine the cost and destination of this move */
 			for(const transition_p t : tb.second){
 				next = next.move(t);
-				inst_path += t;
+				inst_path <<= t;
 			}
 
 			/* TODO check destination reached, although transient? */
@@ -1078,7 +1201,7 @@ std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, s
 			if(tb.second.empty()){
 				if(!t_natural.empty()){
 					transition_p no_action = Transition::create_controlled("", from, from, 0, 0);
-					inst_path += no_action;
+					inst_path <<= no_action;
 				}else{
 					continue;
 				}
@@ -1086,7 +1209,7 @@ std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, s
 
 			for(const transition_p nt : t_natural){
 				next = next.move(nt);
-				inst_path += nt;
+				inst_path <<= nt;
 			}
 
 			/* check if this state needs to be avoided */
@@ -1102,11 +1225,11 @@ std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, s
 
 			if(!to_avoid){
 				/* add the neighbors to the known state set */
-				std::vector<State> next_visited = visited;
-				next_visited.push_back(next);
+				std::set<State> next_visited = visited;
+				next_visited.insert(next);
 
 				/* recursion */
-				Path next_path = path_so_far + inst_path;
+				Path next_path = path_so_far << inst_path;
 				std::vector<Path> viable_paths = _recursive_dfs(next, to, avoid, next_visited, next_path, false);
 
 				paths.insert(paths.end(), viable_paths.begin(), viable_paths.end());
@@ -1116,6 +1239,51 @@ std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, s
 	}
 }
 
+
+std::vector<PathWay> StateModel::pathway_find_dfs(const State from, const State to, std::vector<State> avoid){
+	std::vector<PathWay> all_pathways;
+
+	if(from.dimension() < to.dimension()){
+		return all_pathways;
+	}else if(to.empty() || from.empty()){
+		return all_pathways;
+	}else{
+		std::vector<Path> all_paths = _recursive_dfs(from, to, avoid, std::set<State>({from}), Path(), false);
+		std::map<std::pair<State, std::vector<State>>, std::vector<Path>> cycles_memo;
+
+		/** find cycles in existing paths **/
+		for(Path path : all_paths){
+			PathWay pathway;
+			std::vector<State> verboten_states = avoid;
+
+			/* must be done in reverse to avoid double-counting */
+			for(auto ti = path.transitions.rbegin(); ti != path.transitions.rend(); ++ti){
+				transition_p t = *ti;
+				State fs = t->from;
+				State ts = t->to;
+
+				/* add the to state to the list of obstacles */
+				verboten_states.push_back(ts);
+
+				/* the to state is added to the path's list of states */
+				pathway >>= t;
+
+				/* find and add cycles */
+				std::pair<State, std::vector<State>> key({fs, verboten_states});
+				if(cycles_memo.find(key) == cycles_memo.end()){
+					cycles_memo[key] = find_all_paths_back_around(fs, verboten_states);
+				}
+				pathway.cycles.push_front(cycles_memo[key]);
+			}
+
+			all_pathways.push_back(pathway);
+		}
+
+		std::sort(all_pathways.begin(), all_pathways.end());
+
+		return all_pathways;
+	}
+}
 
 std::map<std::string, std::set<transition_p>> StateModel::all_transitions_from(const State from){
 	std::map<std::string, std::set<transition_p>> tm;
@@ -1230,47 +1398,196 @@ std::set<transition_p> StateModel::prioritized_natural_transitions_from(const St
 	return nts;
 }
 
+
+std::map<std::string, std::set<transition_p>> StateModel::all_transitions_to(const State to){
+	std::map<std::string, std::set<transition_p>> tm;
+	std::map<std::string, bool> disabled;
+
+	for(const transition_p t : transitions){
+		if(to.contains(t->to)){
+			/* check transition conditions */
+			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(to.move_back(t));
+
+			if(pass){
+				tm[t->label].insert(t);
+			}else{
+				tm.erase(t->label);
+				disabled[t->label] = true;
+			}
+		}
+	}
+
+	return tm;
+}
+
+std::map<std::string, std::set<transition_p>> StateModel::natural_transitions_to(const State to){
+	std::map<std::string, std::set<transition_p>> tm;
+	std::map<std::string, bool> disabled;
+
+	for(const transition_p t : transitions){
+		if(to.contains(t->to) && t->type == Transition::NATURAL){
+			/* check transition conditions */
+			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(to.move_back(t));
+
+			if(pass){
+				tm[t->label].insert(t);
+			}else{
+				tm.erase(t->label);
+				disabled[t->label] = true;
+			}
+		}
+	}
+
+	return tm;
+}
+
+std::map<std::string, std::set<transition_p>> StateModel::controlled_transitions_to(const State to, unsigned int restriction){
+	std::map<std::string, std::set<transition_p>> tm;
+	std::map<std::string, bool> disabled;
+
+	for(const transition_p t : transitions){
+		if(to.contains(t->to) && t->type == Transition::CONTROLLED && t->level <= restriction){
+			/* check transition conditions */
+			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(to.move_back(t));
+
+			if(pass){
+				tm[t->label].insert(t);
+			}else{
+				tm.erase(t->label);
+				disabled[t->label] = true;
+			}
+		}
+	}
+
+	if(allow_wait){
+		tm.insert({"", std::set<transition_p>()});
+	}
+
+	return tm;
+}
+
+std::map<std::string, std::set<transition_p>> StateModel::external_transitions_to(const State to){
+	std::map<std::string, std::set<transition_p>> tm;
+	std::map<std::string, bool> disabled;
+
+	for(const transition_p t : transitions){
+		if(to.contains(t->to) && t->type == Transition::EXTERNAL){
+			/* check transition conditions */
+			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(to.move_back(t));
+
+			if(pass){
+				tm[t->label].insert(t);
+			}else{
+				tm.erase(t->label);
+				disabled[t->label] = true;
+			}
+		}
+	}
+
+	return tm;
+}
+
 //-----------------------------------------------------------------------------
 
 StateMachine::StateMachine(const StateModel& model, State initial) :
 StateModel(model),
-current_state(initial)
+current_state(initial),
+previous_state(),
+enter_callbacks(),
+remain_callbacks(),
+exit_callbacks()
 {
 
 }
 
 std::list<State> StateMachine::move(std::string input){
-	std::list<State> states;
+	std::list<State> passed_states;
 
-	State old_state = current_state;
+	previous_state = current_state;
 	std::map<std::string, std::set<transition_p>> cts = controlled_transitions_from(current_state);
 	for(const transition_p t : cts[input]){
 		current_state = current_state.move(t);
 	}
 
 	/* report state changes after controlled transitions */
-	if(current_state != old_state){
-		states.push_back(current_state);	
+	if(current_state != previous_state){
+		passed_states.push_back(current_state);
 	}
 
-	old_state = current_state;
+	/* enter callbacks */
+	for (auto const& scb : enter_callbacks){
+		if(!previous_state.contains(scb.first) && current_state.contains(scb.first)){
+			for(auto const& cb : scb.second){
+				cb();
+			}
+		}
+	}
+
+	/* exit callbacks */
+	for (auto const& scb : exit_callbacks){
+		if(previous_state.contains(scb.first) && !current_state.contains(scb.first)){
+			for(auto const& cb : scb.second){
+				cb();
+			}
+		}
+	}
+
+	State intermediate_state = current_state;
 	std::set<transition_p> nts = prioritized_natural_transitions_from(current_state);
 	for(const transition_p t : nts){
 		current_state = current_state.move(t);
 	}
 
 	/* report state changes after natural transitions */
-	if(current_state != old_state){
-		states.push_back(current_state);	
+	if(current_state != intermediate_state){
+		passed_states.push_back(current_state);
 	}
 
-	return states;
+	/* enter callbacks */
+	for (auto const& scb : enter_callbacks){
+		if(!intermediate_state.contains(scb.first) && current_state.contains(scb.first)){
+			for(auto const& cb : scb.second){
+				cb();
+			}
+		}
+	}
+
+	/* remain callbacks */
+	for(auto const& scb: remain_callbacks){
+		if(previous_state.contains(scb.first) && current_state.contains(scb.first) && intermediate_state.contains(scb.first)){
+			for(auto const& cb : scb.second){
+				cb();
+			}
+		}	
+	}
+
+	/* exit callbacks */
+	for (auto const& scb : exit_callbacks){
+		if(intermediate_state.contains(scb.first) && !current_state.contains(scb.first)){
+			for(auto const& cb : scb.second){
+				cb();
+			}
+		}
+	}
+
+	return passed_states;
 }
 
 State StateMachine::get_state(){
 	return current_state;
 }
 
+void StateMachine::on_enter(const State s, std::function<void(void)> cb){
+	enter_callbacks[s].push_back(cb);
+}
+
+void StateMachine::on_remain(const State s, std::function<void(void)> cb){
+	remain_callbacks[s].push_back(cb);
+}
+
+void StateMachine::on_exit(const State s, std::function<void(void)> cb){
+	exit_callbacks[s].push_back(cb);
+}
 
 Path StateMachine::find_path(const State to, unsigned int restriction){
 	return StateModel::find_path(current_state, to, restriction);

@@ -59,6 +59,26 @@ else()
 endif()
 
 ###############################################################################
+# Game
+###############################################################################
+
+add_executable(game src/ccc.cxx)
+target_link_libraries(game cerebellum)
+
+if(MSVC)
+	# using MSVC
+	target_compile_options(game PRIVATE /EHsc /W3 /WX)
+else()
+	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+		# using Clang
+		target_compile_options(game PRIVATE -Werror -Wall -Wextra -pedantic)
+	elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+		# using GCC
+		target_compile_options(game PRIVATE -Werror -Wall -Wextra -pedantic)
+	endif()
+endif()
+
+###############################################################################
 # Test
 ###############################################################################
 
