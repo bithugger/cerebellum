@@ -44,7 +44,7 @@ void print_path(Path path){
 		cout << " ";
 		i++;
 	}
-	// cout << ":: level = " << path.level << ", cost = " << path.cost << endl;
+	// cout << " :: probability = " << path.probability << ", cost = " << path.cost;
 }
 
 void print_pathway(PathWay pathway){
@@ -52,13 +52,16 @@ void print_pathway(PathWay pathway){
 	auto cyclesit = pathway.cycles.begin();
 	for(auto it = pathway.transitions.begin(); it != pathway.transitions.end(); it++){
 
-		cout << " { ";
-		for(Path cycle : *cyclesit){
-			cout << "( ";
-			print_path(cycle);
-			cout << ") ";
+		if(!cyclesit->empty()){
+			cout << " { ";
+			for(Path cycle : *cyclesit){
+				cout << "( ";
+				print_path(cycle);
+				cout << ") ";
+			}
+			cout << "}";
 		}
-		cout << "} ";
+		cout << " ";
 
 		transition_p t = *it;
 		if(t->type == Transition::CONTROLLED){
@@ -72,7 +75,7 @@ void print_pathway(PathWay pathway){
 		cyclesit++;
 		i++;
 	}
-	// cout << ":: level = " << pathway.level << ", cost = " << pathway.cost << endl;
+	// cout << " :: probability = " << pathway.probability << ", cost = " << pathway.cost;
 }
 
 /** Example 0: a toy example **/
@@ -107,8 +110,39 @@ void example0(){
 	cout << endl;
 }
 
-/** Example 1: elevator model control **/
+/** Example 1: another toy example **/
 void example1(){
+	cout << "Another toy example :" << endl;
+
+	astate_p a = AtomicState::create("a");
+	astate_p b = AtomicState::create("b");
+	astate_p c = AtomicState::create("c");
+	astate_p d = AtomicState::create("d");
+
+	transition_p tab = Transition::create_controlled("a_b", a, b);
+	transition_p tba = Transition::create_controlled("b_a", b, a);
+	tba->inhibit(d);
+	transition_p tcd = Transition::create_natural("c_d", c, d, 0.5);
+	tcd->activate(c);
+
+	StateModel m({tab, tba, tcd});
+
+	vector<Path> ps = m.find_all_paths({a, c}, {d});
+	for(Path p : ps){
+		print_path(p);
+		cout << "\t" << p.probability << endl;
+	}
+
+	vector<PathWay> pws = m.find_all_pathways({a, c}, d);
+	for(PathWay pw : pws){
+		print_pathway(pw);
+		cout << "\t" << pw.probability_arrival_eventually() << endl;
+	}
+	cout << endl;
+}
+
+/** Example 1: elevator model control **/
+void elevator_model(){
 	cout << "Elevator model control:" << endl;
 
 	/* floor states, 3 floors */
@@ -158,12 +192,11 @@ void example1(){
 		/*mumu, mdmd, */dcda, dadc, msmup, msmdp});
 
 	/** test the path finding algorithm **/
-	Path path;
 
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 3, stopped, door open */
 	/* privilege level 0 */
-	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}), 0);
+	Path path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}), 0);
 	/* print */
 	cout << "Case 1 : ";
 	print_path(path);
@@ -242,7 +275,7 @@ void example1(){
 }
 
 /** Example 2: UAV flight director **/
-void example2(){
+void uav_model(){
 	cout << "UAV flight director:" << endl;
 
 	/** State definitions **/
@@ -390,7 +423,9 @@ int main(){
 
 	example1();
 
-	example2();
+	elevator_model();
+
+	uav_model();
 
     return 0;
 }

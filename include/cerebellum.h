@@ -132,19 +132,19 @@ class Transition {
 public:
 
 	static transition_p create_natural(std::string label, const astate_p from, 
-			const astate_p to, double cost = 1, double probability = 1, unsigned int priority = 0);
+			const astate_p to, double probability = 1, double cost = 1, unsigned int priority = 0);
 
 	static transition_p create_controlled(std::string label, const astate_p from, 
-			const astate_p to, double cost = 1, unsigned int restriction = 0);
+			const astate_p to, double cost = 1, unsigned int restriction = 0, double probability = 1);
 
 	static transition_p create_external(std::string label, const astate_p from, 
 			const astate_p to, double cost = 1, double probability = 1);
 
 	static transition_p create_natural(std::string label, const State& from, 
-			const State& to, double cost = 1, double probability = 1, unsigned int priority = 0);
+			const State& to, double probability = 1, double cost = 1, unsigned int priority = 0);
 
 	static transition_p create_controlled(std::string label, const State& from, 
-			const State& to, double cost = 1, unsigned int restriction = 0);
+			const State& to, double cost = 1, unsigned int restriction = 0, double probability = 1);
 
 	static transition_p create_external(std::string label, const State& from, 
 			const State& to, double cost = 1, double probability = 1);
@@ -176,6 +176,9 @@ public:
 	const double probability;
 	const unsigned int level;
 
+	/* pointer to a utility transition that represents the failure to complete */
+	transition_p fail;
+
 protected:
 
 	std::vector<std::set<State>> conditions;
@@ -195,7 +198,7 @@ class Path {
 
 public:
 
-	Path();
+	Path(State);
 	Path(const Path& b);
 	virtual ~Path() = default;
 
@@ -228,10 +231,18 @@ class PathWay : public Path{
 
 public:
 
-	PathWay();
+	PathWay(State);
 	virtual ~PathWay() = default;
 
 	std::list<std::vector<Path> > cycles;
+
+	double probability_arrival_within_step(unsigned int n);
+	double probability_arrival_eventually(double tolerance = 1e-6);
+
+protected:
+
+	double probability_arrival_at_step(unsigned int n, std::map<unsigned int, double>& memo);
+
 };
 
 //-----------------------------------------------------------------------------
@@ -543,7 +554,7 @@ bool State::operator<(const State& o) const {
 }
 
 bool State::accepts(const transition_p t) const {
-	return contains(t->from);
+	return contains(t->from) && t->available_at(*this);
 }
 
 State State::move(const transition_p t) const {
@@ -660,45 +671,70 @@ cost(cost),
 probability(probability),
 level(level),
 conditions(),
-active_conditions(active_conditions)
+active_conditions(active_conditions),
+fail(nullptr)
 {
 
 }
 
 transition_p Transition::create_natural(std::string label, const astate_p from, 
-				const astate_p to, double cost, double probability, unsigned int priority){
-	return transition_p(new Transition(label, State({from}), State({to}), 
+				const astate_p to, double probability, double cost, unsigned int priority){
+	transition_p tp(new Transition(label, State({from}), State({to}), 
 						NATURAL, cost, probability, priority, true));
+	transition_p tpf(new Transition("!" + label, State({from}), State({from}),
+						NATURAL, 0, 1.0 - probability, priority, true));
+	tp->fail = tpf;
+	return tp;
 }
 
 transition_p Transition::create_controlled(std::string label, const astate_p from,
-				const astate_p to, double cost, unsigned int restriction){
-	return transition_p(new Transition(label, State({from}), State({to}), 
-						CONTROLLED, cost, 1, restriction, false));
+				const astate_p to, double cost, unsigned int restriction, double probability){
+	transition_p tp(new Transition(label, State({from}), State({to}), 
+						CONTROLLED, cost, probability, restriction, false));
+	transition_p tpf(new Transition("!" + label, State({from}), State({from}),
+						CONTROLLED, 0, 1.0 - probability, restriction, false));
+	tp->fail = tpf;
+	return tp;
 }
 
 transition_p Transition::create_external(std::string label, const astate_p from, 
 				const astate_p to, double cost, double probability){
-	return transition_p(new Transition(label, State({from}), State({to}), 
+	transition_p tp(new Transition(label, State({from}), State({to}), 
 						EXTERNAL, cost, probability, 0, false));
+	transition_p tpf(new Transition("!" + label, State({from}), State({from}),
+						EXTERNAL, 0, 1.0 - probability, 0, false));
+	tp->fail = tpf;
+	return tp;
 }
 
 transition_p Transition::create_natural(std::string label, const State& from, 
-				const State& to, double cost, double probability, unsigned int priority){
-	return transition_p(new Transition(label, from, to, 
+				const State& to, double probability, double cost, unsigned int priority){
+	transition_p tp(new Transition(label, from, to, 
 						NATURAL, cost, probability, priority, true));
+	transition_p tpf(new Transition("!" + label, from, from,
+						NATURAL, 0, 1.0 - probability, priority, true));
+	tp->fail = tpf;
+	return tp;
 }
 
 transition_p Transition::create_controlled(std::string label, const State& from,
-				const State& to, double cost, unsigned int restriction){
-	return transition_p(new Transition(label, from, to, 
-						CONTROLLED, cost, 1, restriction, false));
+				const State& to, double cost, unsigned int restriction, double probability){
+	transition_p tp(new Transition(label, from, to, 
+						CONTROLLED, cost, probability, restriction, false));
+	transition_p tpf(new Transition("!" + label, from, from,
+						CONTROLLED, 0, 1.0 - probability, restriction, false));
+	tp->fail = tpf;
+	return tp;
 }
 
 transition_p Transition::create_external(std::string label, const State& from, 
 				const State& to, double cost, double probability){
-	return transition_p(new Transition(label, from, to, 
+	transition_p tp(new Transition(label, from, to, 
 						EXTERNAL, cost, probability, 0, false));
+	transition_p tpf(new Transition("!" + label, from, from,
+						EXTERNAL, 0, 1.0 - probability, 0, false));
+	tp->fail = tpf;
+	return tp;
 }
 
 bool Transition::available_at(const State& x) const {
@@ -759,6 +795,9 @@ void Transition::activate(const State& s){
 	std::set<State> S;
 	S.insert(s);
 	conditions.push_back(S);
+	if(fail){
+		fail->activate(s);
+	}
 }
 
 void Transition::activate(const astate_p as){
@@ -769,6 +808,9 @@ void Transition::activate(const astate_p as){
 	std::set<State> S;
 	S.insert(State(as));
 	conditions.push_back(S);
+	if(fail){
+		fail->activate(as);
+	}
 }
 
 void Transition::activate(std::initializer_list<astate_p> as){
@@ -779,6 +821,9 @@ void Transition::activate(std::initializer_list<astate_p> as){
 	std::set<State> S;
 	S.insert(State(as));
 	conditions.push_back(S);
+	if(fail){
+		fail->activate(as);
+	}
 }
 
 void Transition::inhibit(const State& s){
@@ -789,6 +834,9 @@ void Transition::inhibit(const State& s){
 	std::set<State> S;
 	S.insert(s);
 	conditions.push_back(S);
+	if(fail){
+		fail->inhibit(s);
+	}
 }
 
 void Transition::inhibit(const astate_p as){
@@ -799,6 +847,9 @@ void Transition::inhibit(const astate_p as){
 	std::set<State> S;
 	S.insert(State(as));
 	conditions.push_back(S);
+	if(fail){
+		fail->inhibit(as);
+	}
 }
 
 void Transition::inhibit(std::initializer_list<astate_p> as){
@@ -809,11 +860,14 @@ void Transition::inhibit(std::initializer_list<astate_p> as){
 	std::set<State> S;
 	S.insert(State(as));
 	conditions.push_back(S);
+	if(fail){
+		fail->inhibit(as);
+	}
 }
 
 //-----------------------------------------------------------------------------
 
-Path::Path() :
+Path::Path(State start) :
 inputs(),
 transitions(),
 states(),
@@ -821,7 +875,7 @@ cost(0),
 probability(1),
 level(0)
 {
-
+	states.push_back(start);
 }
 
 Path::Path(const Path& b) :
@@ -850,7 +904,7 @@ bool Path::operator<(const Path& b) const {
 					return inputs.size() < b.inputs.size();
 				}
 			}else{
-				return probability < b.probability;
+				return probability > b.probability;
 			}
 		}else{
 			return cost < b.cost;
@@ -884,7 +938,7 @@ void Path::operator<<=(transition_p t){
 		inputs.push_back(t->label);
 	}
 	transitions.push_back(t);
-	states.push_back(t->to);
+	states.push_back(states.back().move(t));
 }
 
 void Path::operator>>=(transition_p t){
@@ -928,11 +982,87 @@ Path Path::operator>>(transition_p t) const {
 
 //-----------------------------------------------------------------------------
 
-PathWay::PathWay() :
-Path(),
+PathWay::PathWay(State start) :
+Path(start),
 cycles()
 {
 
+}
+
+double PathWay::probability_arrival_within_step(unsigned int n){
+	double total_probability = 0;
+	std::map<unsigned int, double> memo;
+
+	for(int i = inputs.size(); i <= n; i++){
+		double inst_probability = probability_arrival_at_step(i, memo);
+		total_probability += inst_probability;
+		if(total_probability > 1){
+			total_probability = 1;
+		}
+	}
+
+	return total_probability;
+}
+
+double PathWay::probability_arrival_eventually(double tolerance){
+	double total_probability = 0;
+	double diff = 1;
+	unsigned int i = inputs.size();
+
+	/* find the size of the largest cycle, which is the number of consecutive turns the 
+	 * differential probability needs to stay below the tolerance for convergence */
+	unsigned int M = 0;
+	for(std::vector<Path> cycles_ : cycles){
+		for(Path cycle : cycles_){
+			if(cycle.inputs.size() > M){
+				M = cycle.inputs.size();
+			}
+		}
+	}
+	unsigned int m = 0;
+
+	std::map<unsigned int, double> memo;
+	do{
+		double inst_probability = probability_arrival_at_step(i, memo);
+		double next_total_probability = total_probability + inst_probability;
+		if(next_total_probability > 1){
+			next_total_probability = 1;
+		}
+		diff = next_total_probability - total_probability;
+		total_probability = next_total_probability;
+
+		if(diff < tolerance){
+			m++;
+		}else{
+			m = 0;
+		}
+	}while(m < M && i++ < std::numeric_limits<unsigned int>::max());
+	return total_probability;
+}
+
+double PathWay::probability_arrival_at_step(unsigned int n, std::map<unsigned int, double>& memo){
+	if(n < inputs.size()){
+		return 0;
+	}else if(n == inputs.size()){
+		return probability;
+	}
+
+	/* n > inputs.size() */
+	if(memo.find(n) == memo.end()){
+		double x = 0;
+		for(std::vector<Path> cycles_now : cycles){
+			for(Path c : cycles_now){
+				unsigned int k = c.inputs.size();
+				double sub_prob = probability_arrival_at_step(n - k, memo);
+				double y = c.probability*sub_prob;
+				if(y > x){
+					x = y;
+				}
+			}
+		}
+		memo.insert({n, x});
+	}
+	return memo[n];
 }
 
 //-----------------------------------------------------------------------------
@@ -1030,7 +1160,7 @@ std::vector<PathWay> StateModel::find_all_pathways_around(const State from, cons
 
 Path StateModel::path_find_djikstra(const State from, const State to, std::vector<State> avoid,
 			unsigned int restriction){
-	Path path;
+	Path path(from);
 
 	if(from.dimension() < to.dimension()){
 		return path;
@@ -1159,7 +1289,7 @@ std::vector<Path> StateModel::path_find_dfs(const State from, const State to, st
 		if(!back){
 			visited.insert(from);
 		}
-		all_paths = _recursive_dfs(from, to, avoid, visited, Path(), back);
+		all_paths = _recursive_dfs(from, to, avoid, visited, Path(from), back);
 
 		std::sort(all_paths.begin(), all_paths.end());
 
@@ -1182,57 +1312,99 @@ std::vector<Path> StateModel::_recursive_dfs(const State from, const State to, s
 		std::map<std::string, std::set<transition_p>> t_controlled = controlled_transitions_from(from);
 		/* see where they go */
 		for(const transition_bundle& tb : t_controlled){
-			Path inst_path;
+			Path inst_path_controlled(from);
+			State state_after_controlled = from;
 
-			State next = from;
 			/* determine the cost and destination of this move */
 			for(const transition_p t : tb.second){
-				next = next.move(t);
-				inst_path <<= t;
+				state_after_controlled = state_after_controlled.move(t);
+				inst_path_controlled <<= t;
 			}
 
 			/* TODO check destination reached, although transient? */
 			/* this option should be parametrized */
 
 			/* after arriving, apply all non-conflicting natural transitions */
-			std::set<transition_p> t_natural = prioritized_natural_transitions_from(next);
+			std::set<transition_p> t_natural = prioritized_natural_transitions_from(state_after_controlled);
 
 			/* if allowed to wait, only do so if there are non-trivial natural transitions afterwards */
 			if(tb.second.empty()){
 				if(!t_natural.empty()){
-					transition_p no_action = Transition::create_controlled("", from, from, 0, 0);
-					inst_path <<= no_action;
+					transition_p no_action = Transition::create_controlled("", from, from, 0, 0, 1);
+					inst_path_controlled <<= no_action;
 				}else{
 					continue;
 				}
 			}
 
+			/* create a powerset of the natural transitions corresponding to each success/failure outcome */
+			/* exclude ones with certain outcomes, i.e. probability = 1 */
+			std::list<State> next_candidates;
+			std::list<Path> inst_path_candidates;
+			std::set<transition_p> uncertain_natural_ts;
 			for(const transition_p nt : t_natural){
-				next = next.move(nt);
-				inst_path <<= nt;
+				if(nt->probability == 1){
+					/* certain outcome, add it to existing chain */
+					state_after_controlled = state_after_controlled.move(nt);
+					inst_path_controlled <<= nt;
+				}else{
+					/* transition could fail, add to uncertain set */
+					uncertain_natural_ts.insert(nt);
+				}
+			}
+			if(uncertain_natural_ts.empty()){
+				next_candidates.push_back(state_after_controlled);
+				inst_path_candidates.push_back(inst_path_controlled);
+			}else{
+				for(int mask = 0; mask < (1 << uncertain_natural_ts.size()); mask++){
+					auto it = uncertain_natural_ts.begin();
+					for(int i = 0; i < uncertain_natural_ts.size(); i++){
+						transition_p nt;
+						if(((mask >> i) & 1) == 0){
+							/* not fail, success */
+							nt = *it;
+						}else{
+							/* not success, fail */
+							nt = (*it)->fail;
+						}
+						next_candidates.push_back(state_after_controlled.move(nt));
+						inst_path_candidates.push_back(inst_path_controlled << nt);
+						++it;
+					}
+				}
 			}
 
-			/* check if this state needs to be avoided */
-			bool to_avoid = false;
-			for(State obst : avoid){
-				to_avoid |= next.contains(obst);
-			}
+			auto next_state_it = next_candidates.begin();
+			auto inst_path_it = inst_path_candidates.begin();
+			while(next_state_it != next_candidates.end() && inst_path_it != inst_path_candidates.end()){
+				State next = *next_state_it;
+				Path inst_path = *inst_path_it;
 
-			/* check if this state has already been visited */
-			for(State rep : visited){
-				to_avoid |= (next == rep);
-			}
+				/* check if this state needs to be avoided */
+				bool to_avoid = false;
+				for(State obst : avoid){
+					to_avoid |= next.contains(obst);
+				}
 
-			if(!to_avoid){
-				/* add the neighbors to the known state set */
-				std::set<State> next_visited = visited;
-				next_visited.insert(next);
+				/* check if this state has already been visited */
+				for(State rep : visited){
+					to_avoid |= (next == rep);
+				}
 
-				/* recursion */
-				Path next_path = path_so_far << inst_path;
-				std::vector<Path> viable_paths = _recursive_dfs(next, to, avoid, next_visited, next_path, false);
+				if(!to_avoid){
+					/* add the neighbors to the known state set */
+					std::set<State> next_visited = visited;
+					next_visited.insert(next);
 
-				paths.insert(paths.end(), viable_paths.begin(), viable_paths.end());
+					/* recursion */
+					Path next_path = path_so_far << inst_path;
+					std::vector<Path> viable_paths = _recursive_dfs(next, to, avoid, next_visited, next_path, false);
+
+					paths.insert(paths.end(), viable_paths.begin(), viable_paths.end());
+				}
+
+				++next_state_it;
+				++inst_path_it;
 			}
 		}
 		return paths;
@@ -1248,25 +1420,39 @@ std::vector<PathWay> StateModel::pathway_find_dfs(const State from, const State 
 	}else if(to.empty() || from.empty()){
 		return all_pathways;
 	}else{
-		std::vector<Path> all_paths = _recursive_dfs(from, to, avoid, std::set<State>({from}), Path(), false);
+		std::vector<Path> all_paths = _recursive_dfs(from, to, avoid, std::set<State>({from}), Path(from), false);
 		std::map<std::pair<State, std::vector<State>>, std::vector<Path>> cycles_memo;
 
 		/** find cycles in existing paths **/
 		for(Path path : all_paths){
-			PathWay pathway;
+			PathWay pathway(from);
 			std::vector<State> verboten_states = avoid;
+			bool avoid_to = true;
 
 			/* must be done in reverse to avoid double-counting */
-			for(auto ti = path.transitions.rbegin(); ti != path.transitions.rend(); ++ti){
+			auto si = path.states.rbegin();
+			for(auto ti = path.transitions.rbegin(); (ti != path.transitions.rend() && si != path.states.rend()); ++ti){
 				transition_p t = *ti;
-				State fs = t->from;
-				State ts = t->to;
-
-				/* add the to state to the list of obstacles */
-				verboten_states.push_back(ts);
+				State ts = *si;
+				State fs = ts.move_back(t);
+				++si;
 
 				/* the to state is added to the path's list of states */
 				pathway >>= t;
+
+				/* add the to state to the list of obstacles */
+				if(ts != fs && avoid_to){
+					verboten_states.push_back(ts);
+					avoid_to = false;
+				}
+
+				if(t->type != Transition::CONTROLLED){
+					/* cannot stop in the middle of a 'turn' */
+					pathway.cycles.push_front(std::vector<Path>());
+					continue;
+				}else{
+					avoid_to = true;
+				}
 
 				/* find and add cycles */
 				std::pair<State, std::vector<State>> key({fs, verboten_states});
