@@ -1268,6 +1268,10 @@ Path StateModel::path_find_djikstra(const State from, const State to, std::vecto
 				}
 			}
 		}
+	}else{
+		/* destination not reachable, clear path */
+		path.states.clear();
+		path.probability = 0;
 	}
 
 	for(transition_p t : transitions_in_path){

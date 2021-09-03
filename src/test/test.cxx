@@ -69,14 +69,17 @@ TEST_CASE("State logic", "[State]"){
 		State y({a2, b1});
 		REQUIRE( x != y );
 		REQUIRE( y != x );
+		// states are well-ordered
 		REQUIRE( ((x < y) || (y < x)) );
 
 		State z({b1, a1});
+		// equality defined in terms of containing the same components
 		REQUIRE( x == z );
 		REQUIRE( !(x < z) );
 		REQUIRE( !(z < x) );
 
 		State w({a2});
+		// subset relationships
 		REQUIRE( w.dimension() == 1);
 		REQUIRE( !(x.contains(w)) );
 		REQUIRE( y.contains(w) );
@@ -108,6 +111,7 @@ TEST_CASE("Transition logic", "[Transition]"){
 		REQUIRE( a12 == a12 );
 		REQUIRE( a12 != a21 );
 		REQUIRE( !(a12 < a12) );
+		// transitions are well-ordered
 		REQUIRE( ((a12 < a21) || (a21 < a12)) );
 	}
 
@@ -117,11 +121,16 @@ TEST_CASE("Transition logic", "[Transition]"){
 	State w({a2, b2});
 
 	SECTION("Transition logic check"){
-		REQUIRE( x.accepts(a12) );
+		// a12 is natural and has not been activated
+		REQUIRE( !x.accepts(a12) );
+		// b12 is controlled
 		REQUIRE( x.accepts(b12) );
+		// a21 and b21 should not be available at x
 		REQUIRE( !x.accepts(a21) );
 		REQUIRE( !x.accepts(b21) );
+		// d12 is activated and available at x
 		REQUIRE( x.accepts(d12) );
+		// x12 is not available at x
 		REQUIRE( !x.accepts(x12) );
 
 		REQUIRE( x.move(a12) == z );
@@ -167,7 +176,112 @@ TEST_CASE("Transition logic", "[Transition]"){
 }
 
 TEST_CASE("State model logic", "[StateModel]"){
+	// using example of elevator model
+	// no data states
 
+	// door states
+	astate_p da = AtomicState::create("door_open");
+	astate_p dc = AtomicState::create("door_closed");
+	transition_p dadc = Transition::create_controlled("close_door", da, dc);
+	transition_p dcda = Transition::create_controlled("open_door", dc, da);
+
+	// floor states
+	astate_p f1 = AtomicState::create("floor_1");
+	astate_p f2 = AtomicState::create("floor_2");
+	astate_p f3 = AtomicState::create("floor_3");
+	transition_p f1f2 = Transition::create_natural("climbed_floor", f1, f2);
+	transition_p f2f3 = Transition::create_natural("climbed_floor", f2, f3);
+	transition_p f3f2 = Transition::create_natural("descended_floor", f3, f2);
+	transition_p f2f1 = Transition::create_natural("descended_floor", f2, f1);
+
+	// motion states
+	astate_p mu = AtomicState::create("moving_up");
+	astate_p ms = AtomicState::create("stopped");
+	astate_p md = AtomicState::create("moving_down");
+	transition_p msmu = Transition::create_controlled("start_climb", ms, mu);
+	transition_p mums = Transition::create_controlled("stop_climb", mu, ms);
+	transition_p msmd = Transition::create_controlled("start_descend", ms, md);
+	transition_p mdms = Transition::create_controlled("stop_descend", md, ms);
+
+	// transition conditions
+	dcda->inhibit(mu);	// do not open door while moving
+	dcda->inhibit(md);	// do not open door while moving
+	msmu->inhibit(da);	// do not start moving while door open
+	msmd->inhibit(da);  // do not start moving while door open
+
+	f1f2->activate(mu);	// naturally climb when moving up
+	f2f3->activate(mu); // naturally climb when moving up
+	f3f2->activate(md); // naturally descend when moving down
+	f2f1->activate(md);	// naturally descend when moving down
+
+	StateModel model({dadc, dcda, f1f2, f2f3, f3f2, f2f1, msmu, mums, msmd, mdms});
+
+	SECTION("State model Djikstra pathfinding sanity"){
+		// shortest path from a state back to itself
+		Path p = model.find_path({da, f1, ms}, {da, f1, ms});
+		REQUIRE(p.inputs.empty());		// contains no inputs
+		REQUIRE(p.transitions.empty());	// contains no transitions
+		REQUIRE(p.states.size() == 1);	// contains only one state
+		REQUIRE(*(p.states.begin()) == State({da, f1, ms}));	// which is itself
+		REQUIRE(p.probability == 1);	// 100%
+
+		// path to an impossible state
+		p = model.find_path({da, f1, ms}, {da, f2, mu});
+		REQUIRE(p.inputs.empty());		// contains no inputs
+		REQUIRE(p.transitions.empty());	// contains no transitions
+		REQUIRE(p.states.empty());		// contains no states
+		REQUIRE(p.probability == 0);	// 0%
+	}
+
+
+	SECTION("State model Djikstra pathfinding"){
+		// shortest path from one state to another
+		Path p = model.find_path({da, f1, ms}, {f3, ms, da});
+		REQUIRE(!p.inputs.empty());			// contains inputs
+		REQUIRE(!p.transitions.empty());	// contains transitions
+		REQUIRE(*(p.states.begin()) == State({da, ms, f1}));	// starts at the inital state
+		REQUIRE(*(p.states.rbegin()) == State({da, f3, ms}));	// ends at the final state
+
+		// this path should contain this exact sequence of inputs
+		// close_door, start_climb, <wait>, stop_climb, open_door
+		list<string> desired({"close_door", "start_climb", "", "stop_climb", "open_door"});
+		auto j = desired.begin();
+		for(auto i = p.inputs.begin(); i != p.inputs.end(); ++i){
+			REQUIRE(*i == *j);
+			j++;
+		}
+		REQUIRE(j == desired.end());
+
+		// this path should contain this exact sequence of states
+		// {da, f1, ms}, {dc, f1, ms}, {dc, f1, mu}, {dc, f2, mu}, {dc, f2, mu}, {dc, f3, mu}, {dc, f3, ms}, {da, f3, ms}
+		// note {dc, f2, mu} is repeated due to having to wait for the natural transition
+		list<State> ds({State({da, f1, ms}), State({dc, f1, ms}), State({dc, f1, mu}), State({dc, f2, mu}),
+						State({dc, f2, mu}), State({dc, f3, mu}), State({dc, f3, ms}), State({da, f3, ms})});
+		auto k = ds.begin();
+		for(auto i = p.states.begin(); i != p.states.end(); ++i){
+			REQUIRE(*i == *k);
+			k++;
+		}
+		REQUIRE(k == ds.end());
+
+		// this path should contain this exact sequence of transitions
+		// dadc, msmu, f1f2, <wait>, f2f3, mums, dcda
+		list<transition_p> dt({dadc, msmu, f1f2, f2f3, mums, dcda});
+		auto l = dt.begin();
+		for(auto i = p.transitions.begin(); i != p.transitions.end(); ++i){
+			if((*i)->label == ""){
+				// wait transition, do not increment l
+			}else{
+				REQUIRE(*i == *l);
+				l++;
+			}
+		}
+		REQUIRE(l == dt.end());
+	}
+
+	SECTION("State model DFS pathfinding"){
+		// TODO
+	}
 }
 
 TEST_CASE("Data state logic", "[DataState]"){
@@ -185,7 +299,7 @@ TEST_CASE("Data state logic", "[DataState]"){
 		REQUIRE( waters->is_subset(waters) );
 	}
 
-	SECTION("Data state contains"){
+	SECTION("Data state comparison"){
 		DataSource fs = DataModel::create_source("fuel", 0, 10);
 		astate_p f2 = fs->value_at(2);
 		astate_p f3 = fs->value_at(3);
@@ -208,5 +322,9 @@ TEST_CASE("Data state logic", "[DataState]"){
 		REQUIRE( !Al3.contains(A3) );
 		REQUIRE( !A.contains(A2) );
 		REQUIRE( !Al3.contains(A2) );
+	}
+
+	SECTION("Data state transitions"){
+
 	}
 }
