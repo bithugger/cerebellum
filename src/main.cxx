@@ -112,7 +112,7 @@ void example0(){
 
 /** Example 1: another toy example **/
 void example1(){
-	cout << "Another toy example :" << endl;
+	cout << "Another toy example:" << endl;
 
 	astate_p a = AtomicState::create("a");
 	astate_p b = AtomicState::create("b");
@@ -266,7 +266,7 @@ void elevator_model(){
 
 	/** find all possible non-looping paths from one state to another **/
 	vector<Path> all_paths = model.find_all_paths(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}));
-	cout << endl << "all paths" << endl;
+	cout << endl << "\tall paths" << endl;
 	for(auto p : all_paths){
 		print_path(p);
 		cout << endl;
@@ -417,6 +417,45 @@ void uav_model(){
 	cout << endl;
 }
 
+void prob_test(){
+	cout << "Probability test:" << endl;
+
+	astate_p a = AtomicState::create("a");
+	astate_p b = AtomicState::create("b");
+	astate_p c = AtomicState::create("c");
+
+	astate_p w = AtomicState::create("w");
+	astate_p k = AtomicState::create("k");
+
+	astate_p s = AtomicState::create("s");
+	astate_p m = AtomicState::create("m");
+
+	transition_p tab = Transition::create_natural("a_b", a, b);
+	tab->activate(State({m, w}));
+	transition_p tbc = Transition::create_natural("b_c", b, c);
+	tbc->activate(State({m, w}));
+
+	transition_p twk = Transition::create_natural("w_k", w, k, 0.3);
+	twk->activate(m);
+
+	transition_p tsm = Transition::create_controlled("s_m", s, m);
+	transition_p tms = Transition::create_controlled("m_s", m, s);
+
+	StateModel model({tab, tbc, twk, tsm, tms});
+
+	Path p = model.find_path(State({a, s, w}), State(c));
+	cout << "Djikstra path-finding ignores failures and returns nothing" << endl;
+	print_path(p);
+	cout << endl;
+
+	vector<Path> pv = model.find_all_paths(State({a, s, w}), State(c));
+	cout << "DFS path-finding does account for failures and probabilities" << endl;
+	for(Path p : pv){
+		print_path(p);
+		cout << " - " << p.probability*100 << "% chance of success" << endl;
+	}
+}
+
 int main(){
 
 	example0();
@@ -426,6 +465,8 @@ int main(){
 	elevator_model();
 
 	uav_model();
+
+	prob_test();
 
     return 0;
 }
