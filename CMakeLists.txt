@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.1.0 FATAL_ERROR)
-project (cerebellum)
+project (cerebellum VERSION 0.0.1 DESCRIPTION "Universal discrete event control system library")
 
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 set(CMAKE_DISABLE_SOURCE_CHANGES  ON)
@@ -31,18 +31,28 @@ set (CMAKE_BUILD_TYPE Release)
 # Library
 ###############################################################################
 
-add_library(cerebellum INTERFACE)
-target_include_directories(cerebellum
-    INTERFACE 
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> 
-        $<INSTALL_INTERFACE:include>
+add_library(cerebellum SHARED
+	src/lib/state.cxx
+	src/lib/transition.cxx
+	src/lib/model.cxx
 )
+
+set_target_properties(cerebellum PROPERTIES VERSION ${PROJECT_VERSION})
+set_target_properties(cerebellum PROPERTIES SOVERSION 1)
+
+set_target_properties(cerebellum PROPERTIES PUBLIC_HEADER include/cerebellum.h)
+target_include_directories(cerebellum PRIVATE include)
+
+install(TARGETS cerebellum
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 ###############################################################################
 # App
 ###############################################################################
 
 add_executable(app src/main.cxx)
+target_include_directories(app PRIVATE include)
 target_link_libraries(app cerebellum)
 
 if(MSVC)
@@ -63,6 +73,7 @@ endif()
 ###############################################################################
 
 add_executable(game src/ccc.cxx)
+target_include_directories(game PRIVATE include)
 target_link_libraries(game cerebellum)
 
 if(MSVC)
@@ -90,6 +101,7 @@ target_include_directories(catch2
 
 add_executable(test_cb src/test/test.cxx)
 target_link_libraries(test_cb cerebellum)
+target_include_directories(test_cb PRIVATE include)
 target_link_libraries(test_cb catch2)
 
 if(MSVC)

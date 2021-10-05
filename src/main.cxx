@@ -424,22 +424,22 @@ void prob_test(){
 	astate_p b = AtomicState::create("b");
 	astate_p c = AtomicState::create("c");
 
-	astate_p w = AtomicState::create("w");
-	astate_p k = AtomicState::create("k");
+	astate_p w = AtomicState::create("working");
+	astate_p k = AtomicState::create("broken");
 
-	astate_p s = AtomicState::create("s");
-	astate_p m = AtomicState::create("m");
+	astate_p s = AtomicState::create("stopped");
+	astate_p m = AtomicState::create("moving");
 
-	transition_p tab = Transition::create_natural("a_b", a, b);
-	tab->activate(State({m, w}));
-	transition_p tbc = Transition::create_natural("b_c", b, c);
-	tbc->activate(State({m, w}));
+	transition_p tab = Transition::create_natural("a_to_b", a, b);
+	tab->activate({m, w});
+	transition_p tbc = Transition::create_natural("b_to_c", b, c);
+	tbc->activate({m, w});
 
-	transition_p twk = Transition::create_natural("w_k", w, k, 0.3);
+	transition_p twk = Transition::create_natural("breakdown", w, k, 0.3);
 	twk->activate(m);
 
-	transition_p tsm = Transition::create_controlled("s_m", s, m);
-	transition_p tms = Transition::create_controlled("m_s", m, s);
+	transition_p tsm = Transition::create_controlled("move", s, m);
+	transition_p tms = Transition::create_controlled("stop", m, s);
 
 	StateModel model({tab, tbc, twk, tsm, tms});
 
@@ -454,6 +454,72 @@ void prob_test(){
 		print_path(p);
 		cout << " - " << p.probability*100 << "% chance of success" << endl;
 	}
+
+	cout << endl;
+}
+
+void b3_test(){
+	cout << "B3 test:" << endl;
+
+	astate_p a = AtomicState::create("a");
+	astate_p b = AtomicState::create("b");
+	astate_p c = AtomicState::create("c");
+
+	astate_p w = AtomicState::create("working");
+	astate_p k = AtomicState::create("broken");
+
+	astate_p s = AtomicState::create("stopped");
+	astate_p f = AtomicState::create("fast");
+	astate_p m = AtomicState::create("slow");
+
+	transition_p tab = Transition::create_natural("a_to_b", a, b, 1.0, 3.0);
+	tab->activate({m, w});
+
+	transition_p tbc = Transition::create_natural("b_to_c", b, c, 1.0, 3.0);
+	tbc->activate({m, w});
+
+	transition_p tabf = Transition::create_natural("a_to_b_fast", a, b, 1.0, 1.0);
+	tabf->activate({f, w});
+
+	transition_p tbcf = Transition::create_natural("b_to_c_fast", b, c, 1.0, 1.0);
+	tbcf->activate({f, w});
+
+	transition_p twk = Transition::create_natural("breakdown_slow", w, k, 0.1, 1.0, 1);
+	twk->activate(m);
+
+	transition_p twkf = Transition::create_natural("breakdown_fast", w, k, 0.3, 1.0, 1);
+	twkf->activate(f);
+
+	transition_p tsm = Transition::create_controlled("move_slow", s, m);
+	transition_p tms = Transition::create_controlled("stop_slow", m, s);
+	transition_p tsf = Transition::create_controlled("move_fast", s, f);
+	transition_p tfs = Transition::create_controlled("stop_fast", f, s);
+
+	StateModel model({tab, tbc, twk, tsm, tms, tabf, tbcf, tsf, tfs, twkf});
+
+	Path p = model.find_best_path_over_likelihood(State({a, s, w}), State(c), 0.0);
+	cout << "B3 path-finding lowest cost with over 0% likelihood" << endl;
+	print_path(p);
+	cout << " - " << p.probability*100 << "% chance of success, cost " << p.cost << endl;
+	cout << endl;
+
+	p = model.find_best_path_over_likelihood(State({a, s, w}), State(c), 0.5);
+	cout << "B3 path-finding lowest cost with over 50% likelihood" << endl;
+	print_path(p);
+	cout << " - " << p.probability*100 << "% chance of success, cost " << p.cost << endl;
+	cout << endl;
+
+	p = model.find_likeliest_path_under_cost(State({a, s, w}), State(c), 10);
+	cout << "B3 path-finding most likely with under 10 cost" << endl;
+	print_path(p);
+	cout << " - " << p.probability*100 << "% chance of success, cost " << p.cost << endl;
+	cout << endl;
+
+	p = model.find_likeliest_path_under_cost(State({a, s, w}), State(c), 5);
+	cout << "B3 path-finding most likely with under 5 cost" << endl;
+	print_path(p);
+	cout << " - " << p.probability*100 << "% chance of success, cost " << p.cost << endl;
+	cout << endl;
 }
 
 int main(){
@@ -467,6 +533,8 @@ int main(){
 	uav_model();
 
 	prob_test();
+
+	b3_test();
 
     return 0;
 }
