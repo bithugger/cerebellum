@@ -137,19 +137,13 @@ public:
 			const astate_p to, double probability = 1, double cost = 1, int priority = 0);
 
 	static transition_p create_controlled(std::string label, const astate_p from, 
-			const astate_p to, double cost = 1, int restriction = 0, double probability = 1);
-
-	static transition_p create_external(std::string label, const astate_p from, 
-			const astate_p to, double cost = 1, double probability = 1);
+			const astate_p to, double cost = 1, double probability = 1, int priority = 0);
 
 	static transition_p create_natural(std::string label, const State& from, 
 			const State& to, double probability = 1, double cost = 1, int priority = 0);
 
 	static transition_p create_controlled(std::string label, const State& from, 
-			const State& to, double cost = 1, int restriction = 0, double probability = 1);
-
-	static transition_p create_external(std::string label, const State& from, 
-			const State& to, double cost = 1, double probability = 1);
+			const State& to, double cost = 1, double probability = 1, int priority = 0);
 
 	virtual ~Transition() = default;
 
@@ -168,15 +162,10 @@ public:
 	const State from;
 	const State to;
 
-	const enum transition_type {
-		NATURAL,
-		CONTROLLED,
-		EXTERNAL
-	} type;
-	
+	const bool controllable;
 	const double cost;
 	const double probability;
-	const int level;
+	const int priority;
 
 	/* pointer to a utility transition that represents the failure to complete */
 	transition_p fail;
@@ -187,7 +176,7 @@ protected:
 	bool active_conditions;
 
 	Transition(std::string label, const State& from, const State& to, 
-				transition_type type, double cost, double probability, 
+				bool controllable, double cost, double probability, 
 				int level, bool active_conditions);
 
 };
@@ -210,7 +199,6 @@ public:
 
 	double cost;
 	double probability;
-	int level;
 
 	bool operator<(const Path& b) const;
 
@@ -263,42 +251,36 @@ public:
 	const std::set<transition_p> transitions;
 
 	/** Find a single cost-optimal path using Djikstra's algorithm **/
-	Path find_path(const State from, const State to, 
-				int restriction = std::numeric_limits<int>::max());
+	Path find_path(const State from, const State to);
 
-	Path find_path_around(const State from, const State to, const State avoid,
-				int restriction = std::numeric_limits<int>::max());
+	Path find_path_around(const State from, const State to, const State avoid);
 
-	Path find_path_around(const State from, const State to, std::vector<State> avoid,
-				int restriction = std::numeric_limits<int>::max());
+	Path find_path_around(const State from, const State to, std::vector<State> avoid);
 
-	Path find_path_around(const State from, const State to, std::initializer_list<State> avoid,
-				int restriction = std::numeric_limits<int>::max());
+	Path find_path_around(const State from, const State to, std::initializer_list<State> avoid);
 
 	/** Find a single cost/probability optimal path, with probability/cost restrictions, using B3 search **/
-	Path find_best_path_over_likelihood(const State from, const State to, double prob_limit, 
-				int restriction = std::numeric_limits<int>::max());
+	Path find_best_path_over_likelihood(const State from, const State to, double prob_limit);
 
 	Path find_best_path_around_over_likelihood(const State from, const State to, 
-				const State avoid, double prob_limit, int restriction = std::numeric_limits<int>::max());
+				const State avoid, double prob_limit);
 
 	Path find_best_path_around_over_likelihood(const State from, const State to, 
-				std::vector<State> avoid, double prob_limit, int restriction = std::numeric_limits<int>::max());
+				std::vector<State> avoid, double prob_limit);
 
 	Path find_best_path_around_over_likelihood(const State from, const State to, 
-				std::initializer_list<State> avoid, double prob_limit, int restriction = std::numeric_limits<int>::max());
+				std::initializer_list<State> avoid, double prob_limit);
 	
-	Path find_likeliest_path_under_cost(const State from, const State to, double cost_limit,
-				int restriction = std::numeric_limits<int>::max());
+	Path find_likeliest_path_under_cost(const State from, const State to, double cost_limit);
 
 	Path find_likeliest_path_around_under_cost(const State from, const State to, 
-				const State avoid, double cost_limit, int restriction = std::numeric_limits<int>::max());
+				const State avoid, double cost_limit);
 
 	Path find_likeliest_path_around_under_cost(const State from, const State to, 
-				std::vector<State> avoid, double cost_limit, int restriction = std::numeric_limits<int>::max());
+				std::vector<State> avoid, double cost_limit);
 
 	Path find_likeliest_path_around_under_cost(const State from, const State to, 
-				std::initializer_list<State> avoid, double cost_limit, int restriction = std::numeric_limits<int>::max());
+				std::initializer_list<State> avoid, double cost_limit);
 
 	/** Find all simple paths (no cycles) using DFS **/
 	std::vector<Path> find_all_paths(const State from, const State to);
@@ -325,11 +307,11 @@ protected:
 	bool allow_wait;
 
 	/** path finding algorithms **/
-	Path path_find_djikstra(const State from, const State to, std::vector<State> avoid, int restriction);
+	Path path_find_djikstra(const State from, const State to, std::vector<State> avoid);
 
 	/* B3 (best-first branch and bound) path finding for lowest cost with privilege and total probability/cost limits */
 	Path path_find_b3(const State from, const State to, std::vector<State> avoid, 
-				double probability_limit, double cost_limit, int restriction);
+				double probability_limit, double cost_limit);
 
 	/* find all paths from one state to another given obstacles, this is memory and computationally intensive */
 	std::vector<Path> path_find_dfs(const State from, const State to, std::vector<State> avoid, bool back);
@@ -345,10 +327,7 @@ protected:
 
 	std::map<std::string, std::set<transition_p>> natural_transitions_from(const State from);
 
-	std::map<std::string, std::set<transition_p>> controlled_transitions_from(const State from,
-				int restriction = std::numeric_limits<int>::max());
-
-	std::map<std::string, std::set<transition_p>> external_transitions_from(const State from);
+	std::map<std::string, std::set<transition_p>> controlled_transitions_from(const State from);
 
 	/** since transitions are applied one at a time, a later transition may become unavailable
 	 * after a move. this function finds the sequence of natural transitions, sorted by priority,
@@ -358,16 +337,6 @@ protected:
 	/** some natural transitions can fail, leading to alternatives in terms of nonconflicting
 	 * pathways. this function computes all potential paths */
 	std::set<std::list<transition_p>> all_potential_natural_transitions_from(const State from);
-
-	/** returns all transitions to a given state from a state where it is enabled **/
-	std::map<std::string, std::set<transition_p>> all_transitions_to(const State to);
-
-	std::map<std::string, std::set<transition_p>> natural_transitions_to(const State to);
-
-	std::map<std::string, std::set<transition_p>> controlled_transitions_to(const State to,
-				int restriction = std::numeric_limits<int>::max());
-
-	std::map<std::string, std::set<transition_p>> external_transitions_to(const State to);
 
 	/* follow a series of natural transitions from state x until a conflict arises or all transitions are used */
 	std::set<std::list<transition_p>> _recursive_expand_possible_transitions(const State x, std::list<transition_p> nt_to_go);
@@ -393,7 +362,7 @@ public:
 	void on_remain(const State s, std::function<void(void)> cb);
 	void on_exit(const State s, std::function<void(void)> cb);
 
-	Path find_path(const State to, int restriction = std::numeric_limits<int>::max());
+	Path find_path(const State to);
 
 protected:
 

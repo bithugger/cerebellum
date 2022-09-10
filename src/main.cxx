@@ -33,14 +33,11 @@ void print_path(Path path){
 	size_t i = 0;
 	for(auto it = path.transitions.begin(); it != path.transitions.end(); it++){
 		transition_p t = *it;
-		if(t->type == Transition::CONTROLLED){
+		if(t->controllable){
 			cout << "<" << t->label << ">";
-		}else if(t->type == Transition::NATURAL){
-			cout << "[" << t->label << "]";
 		}else{
-			cout << t->label;
+			cout << "[" << t->label << "]";
 		}
-
 		cout << " ";
 		i++;
 	}
@@ -64,12 +61,10 @@ void print_pathway(PathWay pathway){
 		cout << " ";
 
 		transition_p t = *it;
-		if(t->type == Transition::CONTROLLED){
+		if(t->controllable){
 			cout << "<" << t->label << ">";
-		}else if(t->type == Transition::NATURAL){
-			cout << "[" << t->label << "]";
 		}else{
-			cout << t->label;
+			cout << "[" << t->label << "]";
 		}
 
 		cyclesit++;
@@ -172,12 +167,6 @@ void elevator_model(){
 	msmd->inhibit(da);
 	msmd->inhibit(floors->value_leq(1));
 	transition_p mdms = Transition::create_controlled("stop", md, ms);
-	
-	/* privileged motion transitions */
-	transition_p msmup = Transition::create_controlled("start_ascending_privileged", ms, mu, 5, 1);
-	msmup->inhibit(floors->value_geq(3));
-	transition_p msmdp = Transition::create_controlled("start_descending_privileged", ms, md, 5, 1);
-	msmdp->inhibit(floors->value_leq(1));
 
 	/* door transitions */
 	transition_p dcda = Transition::create_controlled("open_door", dc, da);
@@ -188,15 +177,13 @@ void elevator_model(){
 	dadc->inhibit(md);
 
 	/** state model with all atomic states and transitions **/
-	StateModel model({climbed, descended, msmu, mums, msmd, mdms, 
-		/*mumu, mdmd, */dcda, dadc, msmup, msmdp});
+	StateModel model({climbed, descended, msmu, mums, msmd, mdms, dcda, dadc});
 
 	/** test the path finding algorithm **/
 
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 3, stopped, door open */
-	/* privilege level 0 */
-	Path path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}), 0);
+	Path path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}));
 	/* print */
 	cout << "Case 1 : ";
 	print_path(path);
@@ -204,46 +191,26 @@ void elevator_model(){
 
 	/* find a path from state floor 1, stopped, door open, to
 	 * state floor 2, moving up, door open */
-	/* privilege level 0, no path should exist */
-	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(2), mu, da}), 0);
+	/* no path should exist */
+	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(2), mu, da}));
 	/* print */
 	cout << "Case 2 : ";
 	print_path(path);
 	cout << endl;
 
-	/* find a path from state floor 1, stopped, door open, to
-	 * state floor 3, stopped, door open */
-	/* privilege level unlimited */
-	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(3), ms, da}), 0);
+	/* find a path from state floor 3, stopped, door open, to
+	 * state set floor 1, stopped */
+	path = model.find_path(State({floors->value_at(3), ms, da}), State({floors->value_at(1), ms}));
 	/* print */
 	cout << "Case 3 : ";
 	print_path(path);
 	cout << endl;
 
-	/* find a path from state floor 1, stopped, door open, to
-	 * state floor 2, moving up, door open */
-	/* privilege level unlimited */
-	path = model.find_path(State({floors->value_at(1), ms, da}), State({floors->value_at(2), mu, da}));
-	/* print */
-	cout << "Case 4 : ";
-	print_path(path);
-	cout << endl;
-
-	/* find a path from state floor 3, stopped, door open, to
-	 * state set floor 1, stopped */
-	/* privilege level 0 */
-	path = model.find_path(State({floors->value_at(3), ms, da}), State({floors->value_at(1), ms}), 0);
-	/* print */
-	cout << "Case 5 : ";
-	print_path(path);
-	cout << endl;
-
 	/* find a path from state floor 3, stopped, door open, to
 	 * state set floor 1 */
-	/* privilege level 0 */
-	path = model.find_path(State({floors->value_at(3), ms, da}), State({floors->value_at(1)}), 0);
+	path = model.find_path(State({floors->value_at(3), ms, da}), State({floors->value_at(1)}));
 	/* print */
-	cout << "Case 6 : ";
+	cout << "Case 4 : ";
 	print_path(path);
 	cout << endl;
 
@@ -251,7 +218,7 @@ void elevator_model(){
 	/* initial state floor 1, stopped, door open */
 	StateMachine sm(model, State({floors->value_at(1), ms, da}));
 	/* find path to state floor 3, stopped, door open */
-	path = sm.find_path(State({floors->value_at(3), ms, da}), 0);
+	path = sm.find_path(State({floors->value_at(3), ms, da}));
 	/* apply the inputs to the state machine, print all intermediate states */
 	cout << "Case 1 state flow :" << endl;
 	for(const string& s : path.inputs){
@@ -306,7 +273,6 @@ void uav_model(){
 	land->inhibit(x1); // cannot land at waypoints
 	land->inhibit(x2); // unless in an emergency, requiring elevated privilege
 	land->inhibit(x3);
-	transition_p eland = Transition::create_controlled("emergency_land", af, ag, 30, 1);
 
 	transition_p takeoff = Transition::create_controlled("takeoff", ag, af);
 	takeoff->inhibit(fuel->value_leq(0)); // cannot takeoff without fuel
@@ -365,30 +331,30 @@ void uav_model(){
 	transition_p nh_na = Transition::create_controlled("to_alt", nh, na, 2); // from home
 	transition_p nd_na = Transition::create_controlled("to_alt", nd, na, 2); // from dest
 
-	vector<transition_p> all_transitions({land, takeoff, eland, crash, fuel_burn,
+	vector<transition_p> all_transitions({land, takeoff, crash, fuel_burn,
 		xh_x1, x1_xh, x1_x2, x2_x1, x2_xa, xa_x2, x2_x3, x3_x2, x3_xd, xd_x3, 
 		nd_nh, nh_nd, na_nh, nh_na, na_nd, nd_na});
 
 	StateModel model(all_transitions);
 
 	cout << "Case 1 : ";
-	print_path(model.find_path({ag, na, x2, fuel->value_at(2)}, {ag, xd}, 0));
+	print_path(model.find_path({ag, na, x2, fuel->value_at(2)}, {ag, xd}));
 	cout << endl;
 
 	cout << "Case 2 : ";
-	print_path(model.find_path({ag, nh, xh, fuel->value_at(4)}, {ag, xd}, 0));
+	print_path(model.find_path({ag, nh, xh, fuel->value_at(4)}, {ag, xd}));
 	cout << endl;
 
 	cout << "Case 3 : ";
-	print_path(model.find_path({af, nd, x1, fuel->value_at(1)}, {ag}, 0));
+	print_path(model.find_path({af, nd, x1, fuel->value_at(1)}, {ag}));
 	cout << endl;
 
 	cout << "Case 4 : ";
-	print_path(model.find_path({af, nd, x2, fuel->value_at(1)}, {ag}, 0));
+	print_path(model.find_path({af, nd, x2, fuel->value_at(1)}, {ag}));
 	cout << endl;
 
 	cout << "Case 5 : ";
-	print_path(model.find_path({af, nd, x3, fuel->value_at(1)}, {ag}, 0));
+	print_path(model.find_path({af, nd, x3, fuel->value_at(1)}, {ag}));
 	cout << endl;
 
 	cout << "Case 6 : ";
@@ -402,7 +368,7 @@ void uav_model(){
 	/** test an instance of this model as a state machine **/
 	StateMachine uav(model, State({ag, nh, xh, fuel->value_at(4)}));
 	uav.on_enter(State({ag, xd}), [](){ cout << "GOAL!" << endl; });
-	Path path = uav.find_path(State({ag, xd}), 0);
+	Path path = uav.find_path(State({ag, xd}));
 	cout << "Case 2 state flow :" << endl;
 	for(const string& s : path.inputs){
 		cout << uav.get_state() << ": ";

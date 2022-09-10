@@ -36,7 +36,6 @@ int main(){
 	land->inhibit(x1); // cannot land at waypoints
 	land->inhibit(x2); // unless in an emergency, requiring elevated privilege
 	land->inhibit(x3);
-	// transition_p eland = Transition::create_controlled("emergency_land", af, ag, 30, 1);
 
 	transition_p takeoff = Transition::create_controlled("takeoff", ag, af);
 	takeoff->inhibit(fuel->value_leq(0)); // cannot takeoff without fuel
@@ -119,7 +118,7 @@ int main(){
 	transition_p na_nf = Transition::create_controlled("to_fuel", na, nf, 2); // from alt
 	
 
-	vector<transition_p> all_transitions({land, takeoff, /* eland, */ crash, fuel_burn, refuel,
+	vector<transition_p> all_transitions({land, takeoff, crash, fuel_burn, refuel,
 		xh_x1, x1_xh, x1_x2, x2_x1, x2_xa, xa_x2, x2_x3, x3_x2, x3_xd, xd_x3, x2_xf, xf_x2,
 		nd_nh, nh_nd, nf_nh, na_nh, nh_na, nf_nd, na_nd, nd_na, nf_na, nh_nf, nd_nf, na_nf});
 

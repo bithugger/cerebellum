@@ -57,70 +57,70 @@ allow_wait(b.allow_wait)
 
 }
 
-Path StateModel::find_path_around(const State from, const State to, vector<State> avoid, int restriction){
-	return path_find_djikstra(from, to, avoid, restriction);
+Path StateModel::find_path_around(const State from, const State to, vector<State> avoid){
+	return path_find_djikstra(from, to, avoid);
 }
 
-Path StateModel::find_path_around(const State from, const State to, const State avoid, int restriction){
+Path StateModel::find_path_around(const State from, const State to, const State avoid){
 	vector<State> avoids;
 	avoids.push_back(avoid);
-	return path_find_djikstra(from, to, avoids, restriction);
+	return path_find_djikstra(from, to, avoids);
 }
 
-Path StateModel::find_path_around(const State from, const State to, initializer_list<State> avoid, int restriction){
+Path StateModel::find_path_around(const State from, const State to, initializer_list<State> avoid){
 	vector<State> avoids(avoid.begin(), avoid.end());
-	return path_find_djikstra(from, to, avoids, restriction);
+	return path_find_djikstra(from, to, avoids);
 }
 
-Path StateModel::find_path(const State from, const State to, int restriction){
+Path StateModel::find_path(const State from, const State to){
 	vector<State> avoids;
-	return path_find_djikstra(from, to, avoids, restriction);
+	return path_find_djikstra(from, to, avoids);
 }
 
-Path StateModel::find_best_path_over_likelihood(const State from, const State to, double prob_limit, int restriction){
+Path StateModel::find_best_path_over_likelihood(const State from, const State to, double prob_limit){
 	vector<State> avoids;
-	return path_find_b3(from, to, avoids, prob_limit, numeric_limits<double>::max(), restriction);
+	return path_find_b3(from, to, avoids, prob_limit, numeric_limits<double>::max());
 }
 
 Path StateModel::find_best_path_around_over_likelihood(const State from, const State to, 
-			const State avoid, double prob_limit, int restriction){
+			const State avoid, double prob_limit){
 	vector<State> avoids;
 	avoids.push_back(avoid);
-	return path_find_b3(from, to, avoids, prob_limit, numeric_limits<double>::max(), restriction);
+	return path_find_b3(from, to, avoids, prob_limit, numeric_limits<double>::max());
 }
 
 Path StateModel::find_best_path_around_over_likelihood(const State from, const State to, 
-			vector<State> avoid, double prob_limit, int restriction){
-	return path_find_b3(from, to, avoid, prob_limit, numeric_limits<double>::max(), restriction);
+			vector<State> avoid, double prob_limit){
+	return path_find_b3(from, to, avoid, prob_limit, numeric_limits<double>::max());
 }
 
 Path StateModel::find_best_path_around_over_likelihood(const State from, const State to, 
-			initializer_list<State> avoid, double prob_limit, int restriction){
+			initializer_list<State> avoid, double prob_limit){
 	vector<State> avoids(avoid.begin(), avoid.end());
-	return path_find_b3(from, to, avoids, prob_limit, numeric_limits<double>::max(), restriction);
+	return path_find_b3(from, to, avoids, prob_limit, numeric_limits<double>::max());
 }
 
-Path StateModel::find_likeliest_path_under_cost(const State from, const State to, double cost_limit, int restriction){
+Path StateModel::find_likeliest_path_under_cost(const State from, const State to, double cost_limit){
 	vector<State> avoids;
-	return path_find_b3(from, to, avoids, 0, cost_limit, restriction);
+	return path_find_b3(from, to, avoids, 0, cost_limit);
 }
 
 Path StateModel::find_likeliest_path_around_under_cost(const State from, const State to, 
-			const State avoid, double cost_limit, int restriction){
+			const State avoid, double cost_limit){
 	vector<State> avoids;
 	avoids.push_back(avoid);
-	return path_find_b3(from, to, avoids, 0, cost_limit, restriction);
+	return path_find_b3(from, to, avoids, 0, cost_limit);
 }
 
 Path StateModel::find_likeliest_path_around_under_cost(const State from, const State to, 
-			vector<State> avoid, double cost_limit, int restriction){
-	return path_find_b3(from, to, avoid, 0, cost_limit, restriction);
+			vector<State> avoid, double cost_limit){
+	return path_find_b3(from, to, avoid, 0, cost_limit);
 }
 
 Path StateModel::find_likeliest_path_around_under_cost(const State from, const State to, 
-			initializer_list<State> avoid, double cost_limit, int restriction){
+			initializer_list<State> avoid, double cost_limit){
 	vector<State> avoids(avoid.begin(), avoid.end());
-	return path_find_b3(from, to, avoids, 0, cost_limit, restriction);
+	return path_find_b3(from, to, avoids, 0, cost_limit);
 }
 
 
@@ -171,7 +171,7 @@ vector<PathWay> StateModel::find_all_pathways_around(const State from, const Sta
 	return pathway_find_dfs(from, to, avoid);
 }
 
-Path StateModel::path_find_djikstra(const State from, const State to, vector<State> avoid, int restriction){
+Path StateModel::path_find_djikstra(const State from, const State to, vector<State> avoid){
 	Path path(from);
 
 	if(from.dimension() < to.dimension()){
@@ -214,7 +214,7 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 		visited_states.insert(u);
 
 		/* find available controlled transitions */
-		map<string, set<transition_p>> t_controlled = controlled_transitions_from(u, restriction);
+		map<string, set<transition_p>> t_controlled = controlled_transitions_from(u);
 		/* see where they go */
 		for(const transition_bundle& tb : t_controlled){
 			/* determine the cost, probability, and destination of this move */
@@ -300,7 +300,7 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 }
 
 Path StateModel::path_find_b3(const State from, const State to, vector<State> avoid, 
-				double probability_limit, double cost_limit, int restriction){
+				double probability_limit, double cost_limit){
     Path path(from);
 
 	if(from.dimension() < to.dimension()){
@@ -330,7 +330,7 @@ Path StateModel::path_find_b3(const State from, const State to, vector<State> av
     neighbour_state_heap.push_back(path_solver_state{from, 0.0, 1.0, path});
 	set<State> visited_states;
 	map<State, double> lowest_cost_to_reach_state;
-	map<State, double> hightest_prob_to_reach_state;
+	map<State, double> highest_prob_to_reach_state;
 
     while(!neighbour_state_heap.empty()){
 
@@ -368,7 +368,7 @@ Path StateModel::path_find_b3(const State from, const State to, vector<State> av
 			}
 
 			if(lowest_cost_to_reach_state.find(u) != lowest_cost_to_reach_state.end() && lowest_cost_to_reach_state[u] < cost_so_far &&
-				hightest_prob_to_reach_state.find(u) != hightest_prob_to_reach_state.end() && hightest_prob_to_reach_state[u] > prob_so_far){
+				highest_prob_to_reach_state.find(u) != highest_prob_to_reach_state.end() && highest_prob_to_reach_state[u] > prob_so_far){
 				/* this path costs more and is less likely to succeed, discard */
 				viable = false;
 			}
@@ -391,7 +391,7 @@ Path StateModel::path_find_b3(const State from, const State to, vector<State> av
 
 		/* explore neighbouring states from here */
 		/* find available controlled transitions */
-		map<string, set<transition_p>> t_controlled = controlled_transitions_from(u, restriction);
+		map<string, set<transition_p>> t_controlled = controlled_transitions_from(u);
 		/* see where they go */
 		for(const transition_bundle& tb : t_controlled){
 			/* determine the cost, probability, and destination of this move */
@@ -437,9 +437,9 @@ Path StateModel::path_find_b3(const State from, const State to, vector<State> av
 							lowest_cost_to_reach_state[state_after_controlled] > cost_after_controlled){
 							lowest_cost_to_reach_state[state_after_controlled] = cost_after_controlled;
 						}
-						if(hightest_prob_to_reach_state.find(state_after_controlled) == hightest_prob_to_reach_state.end() ||
-							hightest_prob_to_reach_state[state_after_controlled] < prob_after_controlled){
-							hightest_prob_to_reach_state[state_after_controlled] = prob_after_controlled;
+						if(highest_prob_to_reach_state.find(state_after_controlled) == highest_prob_to_reach_state.end() ||
+							highest_prob_to_reach_state[state_after_controlled] < prob_after_controlled){
+							highest_prob_to_reach_state[state_after_controlled] = prob_after_controlled;
 						}
 					}
 				}
@@ -479,9 +479,9 @@ Path StateModel::path_find_b3(const State from, const State to, vector<State> av
 								lowest_cost_to_reach_state[next_state] > next_cost){
 								lowest_cost_to_reach_state[next_state] = next_cost;
 							}
-							if(hightest_prob_to_reach_state.find(next_state) == hightest_prob_to_reach_state.end() ||
-								hightest_prob_to_reach_state[next_state] < next_prob){
-								hightest_prob_to_reach_state[next_state] = next_prob;
+							if(highest_prob_to_reach_state.find(next_state) == highest_prob_to_reach_state.end() ||
+								highest_prob_to_reach_state[next_state] < next_prob){
+								highest_prob_to_reach_state[next_state] = next_prob;
 							}
 						}
 					}
@@ -653,7 +653,7 @@ vector<PathWay> StateModel::pathway_find_dfs(const State from, const State to, v
 					avoid_to = false;
 				}
 
-				if(t->type != Transition::CONTROLLED){
+				if(!t->controllable){
 					/* cannot stop in the middle of a 'turn' */
 					pathway.cycles.push_front(vector<Path>());
 					continue;
@@ -680,19 +680,11 @@ vector<PathWay> StateModel::pathway_find_dfs(const State from, const State to, v
 
 map<string, set<transition_p>> StateModel::all_transitions_from(const State from){
 	map<string, set<transition_p>> tm;
-	map<string, bool> disabled;
 
 	for(const transition_p t : transitions){
-		if(from.contains(t->from)){
-			/* check transition conditions */
-			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(from);
-
-			if(pass){
-				tm[t->label].insert(t);
-			}else{
-				tm.erase(t->label);
-				disabled[t->label] = true;
-			}
+		/* check transition conditions */
+		if(from.contains(t->from) && t->available_at(from)){
+			tm[t->label].insert(t);
 		}
 	}
 
@@ -701,66 +693,29 @@ map<string, set<transition_p>> StateModel::all_transitions_from(const State from
 
 map<string, set<transition_p>> StateModel::natural_transitions_from(const State from){
 	map<string, set<transition_p>> tm;
-	map<string, bool> disabled;
 
 	for(const transition_p t : transitions){
-		if(from.contains(t->from) && t->type == Transition::NATURAL){
-			/* check transition conditions */
-			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(from);
-
-			if(pass){
-				tm[t->label].insert(t);
-			}else{
-				tm.erase(t->label);
-				disabled[t->label] = true;
-			}
+		/* check transition conditions */
+		if(!t->controllable && from.contains(t->from) && t->available_at(from)){
+			tm[t->label].insert(t);
 		}
 	}
 
 	return tm;
 }
 
-map<string, set<transition_p>> StateModel::controlled_transitions_from(const State from, int restriction){
+map<string, set<transition_p>> StateModel::controlled_transitions_from(const State from){
 	map<string, set<transition_p>> tm;
-	map<string, bool> disabled;
 
 	for(const transition_p t : transitions){
-		if(from.contains(t->from) && t->type == Transition::CONTROLLED && t->level <= restriction){
-			/* check transition conditions */
-			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(from);
-
-			if(pass){
-				tm[t->label].insert(t);
-			}else{
-				tm.erase(t->label);
-				disabled[t->label] = true;
-			}
+		/* check transition conditions */
+		if(t->controllable && from.contains(t->from) && t->available_at(from)){
+			tm[t->label].insert(t);
 		}
 	}
 
 	if(allow_wait){
 		tm.insert({"", set<transition_p>()});
-	}
-
-	return tm;
-}
-
-map<string, set<transition_p>> StateModel::external_transitions_from(const State from){
-	map<string, set<transition_p>> tm;
-	map<string, bool> disabled;
-
-	for(const transition_p t : transitions){
-		if(from.contains(t->from) && t->type == Transition::EXTERNAL){
-			/* check transition conditions */
-			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(from);
-
-			if(pass){
-				tm[t->label].insert(t);
-			}else{
-				tm.erase(t->label);
-				disabled[t->label] = true;
-			}
-		}
 	}
 
 	return tm;
@@ -773,7 +728,7 @@ list<transition_p> StateModel::nonconflicting_natural_transitions_from(const Sta
 
 	for(auto& kv : tm){
 	 	for(const transition_p t : kv.second){
-	 		nt_level_map[t->level].insert(t);
+	 		nt_level_map[t->priority].insert(t);
 	 	}
 	}
 
@@ -793,44 +748,44 @@ list<transition_p> StateModel::nonconflicting_natural_transitions_from(const Sta
 	return ntl;
 }
 
-set<list<transition_p>> StateModel::_recursive_expand_possible_transitions(const State x, list<transition_p> nt_to_go){
+set<list<transition_p>> StateModel::_recursive_expand_possible_transitions(const State x, list<transition_p> t_to_go){
 	set<list<transition_p>> result;
 
-	if(nt_to_go.empty()){
+	if(t_to_go.empty()){
 		return result;
 	}
 
-	const transition_p nt = nt_to_go.front();
-	list<transition_p> next_nt_to_go(next(nt_to_go.begin()), nt_to_go.end());
+	const transition_p t = t_to_go.front();
+	list<transition_p> next_t_to_go(next(t_to_go.begin()), t_to_go.end());
 
-	if(nt->available_at(x)){
+	if(t->available_at(x)){
 		/* add the no-fail case */
-		if(nt->probability > 0){
-			set<list<transition_p>> sub_possibilities = _recursive_expand_possible_transitions(x.move(nt), next_nt_to_go);
+		if(t->probability > 0){
+			set<list<transition_p>> sub_possibilities = _recursive_expand_possible_transitions(x.move(t), next_t_to_go);
 			if(sub_possibilities.empty()){
 				list<transition_p> l;
-				l.push_back(nt);
+				l.push_back(t);
 				result.insert(l);
 			}else{
 				for(auto lnt : sub_possibilities){
 					list<transition_p> l(lnt);
-					l.push_front(nt);
+					l.push_front(t);
 					result.insert(l);
 				}
 			}
 		}
 
 		/* add the fail case */
-		if(nt->probability < 1){
-			set<list<transition_p>> sub_possibilities = _recursive_expand_possible_transitions(x, next_nt_to_go);
+		if(t->probability < 1){
+			set<list<transition_p>> sub_possibilities = _recursive_expand_possible_transitions(x, next_t_to_go);
 			if(sub_possibilities.empty()){
 				list<transition_p> l;
-				l.push_back(nt->fail);
+				l.push_back(t->fail);
 				result.insert(l);
 			}else{
 				for(auto lnt : sub_possibilities){
 					list<transition_p> l(lnt);
-					l.push_front(nt->fail);
+					l.push_front(t->fail);
 					result.insert(l);
 				}
 			}
@@ -839,7 +794,7 @@ set<list<transition_p>> StateModel::_recursive_expand_possible_transitions(const
 		return result;
 
 	}else{
-		return _recursive_expand_possible_transitions(x, next_nt_to_go);
+		return _recursive_expand_possible_transitions(x, next_t_to_go);
 	}
 }
 
@@ -853,7 +808,7 @@ set<list<transition_p>> StateModel::all_potential_natural_transitions_from(const
 
 	for(auto& kv : tm){
 	 	for(const transition_p t : kv.second){
-	 		nt_level_map[t->level].insert(t);
+	 		nt_level_map[t->priority].insert(t);
 	 	}
 	}
 
@@ -867,94 +822,6 @@ set<list<transition_p>> StateModel::all_potential_natural_transitions_from(const
 	}
 
 	return _recursive_expand_possible_transitions(from, ntl);
-}
-
-map<string, set<transition_p>> StateModel::all_transitions_to(const State to){
-	map<string, set<transition_p>> tm;
-	map<string, bool> disabled;
-
-	for(const transition_p t : transitions){
-		if(to.contains(t->to)){
-			/* check transition conditions */
-			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(to.move_back(t));
-
-			if(pass){
-				tm[t->label].insert(t);
-			}else{
-				tm.erase(t->label);
-				disabled[t->label] = true;
-			}
-		}
-	}
-
-	return tm;
-}
-
-map<string, set<transition_p>> StateModel::natural_transitions_to(const State to){
-	map<string, set<transition_p>> tm;
-	map<string, bool> disabled;
-
-	for(const transition_p t : transitions){
-		if(to.contains(t->to) && t->type == Transition::NATURAL){
-			/* check transition conditions */
-			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(to.move_back(t));
-
-			if(pass){
-				tm[t->label].insert(t);
-			}else{
-				tm.erase(t->label);
-				disabled[t->label] = true;
-			}
-		}
-	}
-
-	return tm;
-}
-
-map<string, set<transition_p>> StateModel::controlled_transitions_to(const State to, int restriction){
-	map<string, set<transition_p>> tm;
-	map<string, bool> disabled;
-
-	for(const transition_p t : transitions){
-		if(to.contains(t->to) && t->type == Transition::CONTROLLED && t->level <= restriction){
-			/* check transition conditions */
-			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(to.move_back(t));
-
-			if(pass){
-				tm[t->label].insert(t);
-			}else{
-				tm.erase(t->label);
-				disabled[t->label] = true;
-			}
-		}
-	}
-
-	if(allow_wait){
-		tm.insert({"", set<transition_p>()});
-	}
-
-	return tm;
-}
-
-map<string, set<transition_p>> StateModel::external_transitions_to(const State to){
-	map<string, set<transition_p>> tm;
-	map<string, bool> disabled;
-
-	for(const transition_p t : transitions){
-		if(to.contains(t->to) && t->type == Transition::EXTERNAL){
-			/* check transition conditions */
-			bool pass = (disabled.find(t->label) == disabled.end()) && t->available_at(to.move_back(t));
-
-			if(pass){
-				tm[t->label].insert(t);
-			}else{
-				tm.erase(t->label);
-				disabled[t->label] = true;
-			}
-		}
-	}
-
-	return tm;
 }
 
 //-----------------------------------------------------------------------------
@@ -1060,6 +927,6 @@ void StateMachine::on_exit(const State s, function<void(void)> cb){
 	exit_callbacks[s].push_back(cb);
 }
 
-Path StateMachine::find_path(const State to, int restriction){
-	return StateModel::find_path(current_state, to, restriction);
+Path StateMachine::find_path(const State to){
+	return StateModel::find_path(current_state, to);
 }

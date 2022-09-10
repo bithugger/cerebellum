@@ -160,11 +160,15 @@ State State::move(const transition_p t) const {
 				});
 				DataState& yy = static_cast<DataState&>(*(*it));
 				DataState& zz = static_cast<DataState&>(*ft.second);
+				int v = yy.value;
 				if(zz.qualifier == DataState::NONE){
-					*it = yy.source->value_at(yy.value + zz.value);
+					v = yy.value + zz.value;
 				}else if(zz.qualifier == DataState::EQUALS){
-					*it = yy.source->value_at(zz.value);
+					v = zz.value;
 				}
+				v = v < yy.source->lower_bound ? yy.source->lower_bound : v;
+				v = v > yy.source->upper_bound ? yy.source->upper_bound : v;
+				*it = yy.source->value_at(v);
 			}else{
 				auto it = find(new_components.begin(), new_components.end(), ft.first);
 				*it = ft.second;	
@@ -172,7 +176,7 @@ State State::move(const transition_p t) const {
 		}
 		return State(new_components);
 	}else{
-		return State();
+		return State(components);
 	}
 }
 
@@ -197,11 +201,15 @@ State State::move_back(const transition_p t) const {
 				});
 				DataState& yy = static_cast<DataState&>(*(*it));
 				DataState& zz = static_cast<DataState&>(*ft.second);
+				int v = zz.value;
 				if(zz.qualifier == DataState::NONE){
-					*it = yy.source->value_at(yy.value - zz.value);
+					v = yy.value - zz.value;
 				}else if(zz.qualifier == DataState::EQUALS){
-					*it = yy.source->value_at(yy.value);
+					v = yy.value;
 				}
+				v = v < yy.source->lower_bound ? yy.source->lower_bound : v;
+				v = v > yy.source->upper_bound ? yy.source->upper_bound : v;
+				*it = yy.source->value_at(v);
 			}else{
 				auto it = find(new_components.begin(), new_components.end(), ft.second);
 				*it = ft.first;
@@ -209,7 +217,7 @@ State State::move_back(const transition_p t) const {
 		}
 		return State(new_components);
 	}else{
-		return State();
+		return State(components);
 	}
 }
 

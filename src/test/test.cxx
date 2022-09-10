@@ -137,7 +137,7 @@ TEST_CASE("Transition logic", "[Transition]"){
 		REQUIRE( x.move(b12) == y );
 		REQUIRE( z.move_back(a12) == x );
 		REQUIRE( y.move(a12) == w );
-		REQUIRE( x.move(a21).empty() );
+		REQUIRE( x.move(a21) == x );
 		REQUIRE( y.move(x12) == z );
 		REQUIRE( w.move_back(d12) == x );
 	}
@@ -325,6 +325,32 @@ TEST_CASE("Data state logic", "[DataState]"){
 	}
 
 	SECTION("Data state transitions"){
+		DataSource fs = DataModel::create_source("fuel", 0, 5);
+		astate_p f0 = fs->value_at(0);
+		astate_p a = AtomicState::create("a");
+		astate_p b = AtomicState::create("b");
+		transition_p fp = Transition::create_controlled("f+", fs->value_any(), fs->value_change(1));
+		transition_p tab = Transition::create_controlled("a-b", {a, fs->value_any()}, {b, fs->value_change(-1)});
+		tab->inhibit(fs->value_leq(0));
 
+		State A({f0, a});
+
+		// cannot move with no fuel
+		REQUIRE(!A.accepts(tab));
+
+		// can fuel up
+		REQUIRE(A.accepts(fp));
+
+		// can move once fueled up
+		REQUIRE(A.move(fp).accepts(tab));
+
+		// moving burns fuel, so cannot move again
+		REQUIRE(!A.move(fp).move(tab).accepts(tab));
+
+		State full = A.move(fp).move(fp).move(fp).move(fp).move(fp);
+
+		// cannot fuel up past full
+		REQUIRE(!full.accepts(fp));
+		REQUIRE(full.move(fp) == full);
 	}
 }

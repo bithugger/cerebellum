@@ -29,15 +29,15 @@ using namespace std;
 
 //-----------------------------------------------------------------------------
 
-Transition::Transition(string label, const State& from, const State& to, transition_type type, 
-                double cost, double probability, int level, bool active_conditions) :
+Transition::Transition(string label, const State& from, const State& to, bool controllable, 
+                double cost, double probability, int priority, bool active_conditions) :
 label(label),
 from(from),
 to(to),
-type(type),
+controllable(controllable),
 cost(cost),
 probability(probability),
-level(level),
+priority(priority),
 conditions(),
 active_conditions(active_conditions),
 fail(nullptr)
@@ -48,29 +48,19 @@ fail(nullptr)
 transition_p Transition::create_natural(string label, const astate_p from, 
 				const astate_p to, double probability, double cost, int priority){
 	transition_p tp(new Transition(label, State({from}), State({to}), 
-						NATURAL, cost, probability, priority, true));
+						false, cost, probability, priority, true));
 	transition_p tpf(new Transition("!" + label, State({from}), State({from}),
-						NATURAL, 0, 1.0 - probability, priority, true));
+						false, 0, 1.0 - probability, priority, true));
 	tp->fail = tpf;
 	return tp;
 }
 
 transition_p Transition::create_controlled(string label, const astate_p from,
-				const astate_p to, double cost, int restriction, double probability){
+				const astate_p to, double cost, double probability, int priority){
 	transition_p tp(new Transition(label, State({from}), State({to}), 
-						CONTROLLED, cost, probability, restriction, false));
+						true, cost, probability, priority, false));
 	transition_p tpf(new Transition("!" + label, State({from}), State({from}),
-						CONTROLLED, 0, 1.0 - probability, restriction, false));
-	tp->fail = tpf;
-	return tp;
-}
-
-transition_p Transition::create_external(string label, const astate_p from, 
-				const astate_p to, double cost, double probability){
-	transition_p tp(new Transition(label, State({from}), State({to}), 
-						EXTERNAL, cost, probability, 0, false));
-	transition_p tpf(new Transition("!" + label, State({from}), State({from}),
-						EXTERNAL, 0, 1.0 - probability, 0, false));
+						true, 0, 1.0 - probability, priority, false));
 	tp->fail = tpf;
 	return tp;
 }
@@ -78,29 +68,19 @@ transition_p Transition::create_external(string label, const astate_p from,
 transition_p Transition::create_natural(string label, const State& from, 
 				const State& to, double probability, double cost, int priority){
 	transition_p tp(new Transition(label, from, to, 
-						NATURAL, cost, probability, priority, true));
+						false, cost, probability, priority, true));
 	transition_p tpf(new Transition("!" + label, from, from,
-						NATURAL, 0, 1.0 - probability, priority, true));
+						false, 0, 1.0 - probability, priority, true));
 	tp->fail = tpf;
 	return tp;
 }
 
 transition_p Transition::create_controlled(string label, const State& from,
-				const State& to, double cost, int restriction, double probability){
+				const State& to, double cost, double probability, int priority){
 	transition_p tp(new Transition(label, from, to, 
-						CONTROLLED, cost, probability, restriction, false));
+						true, cost, probability, priority, false));
 	transition_p tpf(new Transition("!" + label, from, from,
-						CONTROLLED, 0, 1.0 - probability, restriction, false));
-	tp->fail = tpf;
-	return tp;
-}
-
-transition_p Transition::create_external(string label, const State& from, 
-				const State& to, double cost, double probability){
-	transition_p tp(new Transition(label, from, to, 
-						EXTERNAL, cost, probability, 0, false));
-	transition_p tpf(new Transition("!" + label, from, from,
-						EXTERNAL, 0, 1.0 - probability, 0, false));
+						true, 0, 1.0 - probability, priority, false));
 	tp->fail = tpf;
 	return tp;
 }
@@ -240,8 +220,7 @@ inputs(),
 transitions(),
 states(),
 cost(0),
-probability(1),
-level(0)
+probability(1)
 {
 	states.push_back(start);
 }
@@ -251,34 +230,29 @@ inputs(b.inputs),
 transitions(b.transitions),
 states(b.states),
 cost(b.cost),
-probability(b.probability),
-level(b.level)
+probability(b.probability)
 {
 
 }
 
 bool Path::operator<(const Path& b) const {
-	// order by level, cost, probability, input size, transitions size, state size
-	if(level == b.level){
-		if(cost == b.cost){
-			if(probability == b.probability){
-				if(inputs.size() == b.inputs.size()){
-					if(transitions.size() == b.transitions.size()){
-						return states.size() < b.states.size();
-					}else{
-						return transitions.size() < b.transitions.size();
-					}
+	// order by cost, probability, input size, transitions size, state size
+	if(cost == b.cost){
+		if(probability == b.probability){
+			if(inputs.size() == b.inputs.size()){
+				if(transitions.size() == b.transitions.size()){
+					return states.size() < b.states.size();
 				}else{
-					return inputs.size() < b.inputs.size();
+					return transitions.size() < b.transitions.size();
 				}
 			}else{
-				return probability > b.probability;
+				return inputs.size() < b.inputs.size();
 			}
 		}else{
-			return cost < b.cost;
+			return probability > b.probability;
 		}
 	}else{
-		return level < b.level;
+		return cost < b.cost;
 	}
 }
 
@@ -298,11 +272,8 @@ void Path::operator>>=(const Path& b){
 void Path::operator<<=(transition_p t){
 	cost += t->cost;
 	probability *= t->probability;
-	if(t->level > level){
-		level = t->level;
-	}
 
-	if(t->type == Transition::CONTROLLED){
+	if(t->controllable){
 		inputs.push_back(t->label);
 	}
 	transitions.push_back(t);
@@ -312,11 +283,8 @@ void Path::operator<<=(transition_p t){
 void Path::operator>>=(transition_p t){
 	cost += t->cost;
 	probability *= t->probability;
-	if(t->level > level){
-		level = t->level;
-	}
 
-	if(t->type == Transition::CONTROLLED){
+	if(t->controllable){
 		inputs.push_front(t->label);
 	}
 	transitions.push_front(t);
