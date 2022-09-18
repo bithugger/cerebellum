@@ -35,11 +35,13 @@ label(label),
 from(from),
 to(to),
 controllable(controllable),
-cost(cost),
-probability(probability),
+base_cost(cost),
+base_probability(probability),
 priority(priority),
 conditions(),
 active_conditions(active_conditions),
+conditional_costs(),
+conditional_probabilities(),
 fail(nullptr)
 {
 
@@ -88,11 +90,8 @@ transition_p Transition::create_controlled(string label, const State& from,
 bool Transition::available_at(const State& x) const {
 	/* check transition conditions */
 	bool pass = !active_conditions;
-	for(const set<State> s : conditions){
-		bool sat = true;
-		for(const State& c : s){
-			sat &= x.contains(c);
-		}
+	for(const State s : conditions){
+		bool sat = x.contains(s);
 
 		if(active_conditions){
 			pass |= sat;
@@ -140,9 +139,7 @@ void Transition::activate(const State& s){
 		active_conditions = true;
 		conditions.clear();
 	}
-	set<State> S;
-	S.insert(s);
-	conditions.push_back(S);
+	conditions.insert(s);
 	if(fail){
 		fail->activate(s);
 	}
@@ -153,9 +150,7 @@ void Transition::activate(const astate_p as){
 		active_conditions = true;
 		conditions.clear();
 	}
-	set<State> S;
-	S.insert(State(as));
-	conditions.push_back(S);
+	conditions.insert(State(as));
 	if(fail){
 		fail->activate(as);
 	}
@@ -166,9 +161,7 @@ void Transition::activate(initializer_list<astate_p> as){
 		active_conditions = true;
 		conditions.clear();
 	}
-	set<State> S;
-	S.insert(State(as));
-	conditions.push_back(S);
+	conditions.insert(State(as));
 	if(fail){
 		fail->activate(as);
 	}
@@ -179,9 +172,7 @@ void Transition::inhibit(const State& s){
 		active_conditions = false;
 		conditions.clear();
 	}
-	set<State> S;
-	S.insert(s);
-	conditions.push_back(S);
+	conditions.insert(s);
 	if(fail){
 		fail->inhibit(s);
 	}
@@ -192,9 +183,7 @@ void Transition::inhibit(const astate_p as){
 		active_conditions = false;
 		conditions.clear();
 	}
-	set<State> S;
-	S.insert(State(as));
-	conditions.push_back(S);
+	conditions.insert(State(as));
 	if(fail){
 		fail->inhibit(as);
 	}
@@ -205,12 +194,61 @@ void Transition::inhibit(initializer_list<astate_p> as){
 		active_conditions = false;
 		conditions.clear();
 	}
-	set<State> S;
-	S.insert(State(as));
-	conditions.push_back(S);
+	conditions.insert(State(as));
 	if(fail){
 		fail->inhibit(as);
 	}
+}
+
+void Transition::set_cost_at(const State& s, double c){
+	conditional_costs.push_front(make_pair(s, c));
+}
+
+void Transition::set_cost_at(const astate_p as, double c){
+	conditional_costs.push_front(make_pair(State(as), c));
+}
+
+void Transition::set_cost_at(initializer_list<astate_p> as, double c){
+	conditional_costs.push_front(make_pair(State(as), c));
+}
+
+void Transition::set_probability_at(const State& s, double p){
+	conditional_probabilities.push_front(make_pair(s, p));
+	if(fail){
+		fail->set_probability_at(s, 1.0 - p);
+	}
+}
+
+void Transition::set_probability_at(const astate_p as, double p){
+	conditional_probabilities.push_front(make_pair(State(as), p));
+	if(fail){
+		fail->set_probability_at(as, 1.0 - p);
+	}
+}
+
+void Transition::set_probability_at(initializer_list<astate_p> as, double p){
+	conditional_probabilities.push_front(make_pair(State(as), p));
+	if(fail){
+		fail->set_probability_at(as, 1.0 - p);
+	}
+}
+
+double Transition::cost(const State& s) const {
+	for(auto sc : conditional_costs){
+		if(s.contains(sc.first)){
+			return sc.second;
+		}
+	}
+	return base_cost;
+}
+
+double Transition::probability(const State& s) const {
+	for(auto sp : conditional_probabilities){
+		if(s.contains(sp.first)){
+			return sp.second;
+		}
+	}
+	return base_probability;
 }
 
 //-----------------------------------------------------------------------------
@@ -256,7 +294,6 @@ bool Path::operator<(const Path& b) const {
 	}
 }
 
-
 void Path::operator<<=(const Path& b){
 	for(transition_p t : b.transitions){
 		operator<<=(t);
@@ -270,8 +307,8 @@ void Path::operator>>=(const Path& b){
 }
 
 void Path::operator<<=(transition_p t){
-	cost += t->cost;
-	probability *= t->probability;
+	cost += t->cost(states.back());
+	probability *= t->probability(states.back());
 
 	if(t->controllable){
 		inputs.push_back(t->label);
@@ -281,14 +318,14 @@ void Path::operator<<=(transition_p t){
 }
 
 void Path::operator>>=(transition_p t){
-	cost += t->cost;
-	probability *= t->probability;
-
+	states.push_front(states.front().move_back(t));
+	transitions.push_front(t);
 	if(t->controllable){
 		inputs.push_front(t->label);
 	}
-	transitions.push_front(t);
-	states.push_front(t->to);
+
+	cost += t->cost(states.front());
+	probability *= t->probability(states.front());
 }
 
 

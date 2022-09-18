@@ -25,6 +25,7 @@
 #include <cerebellum.h>
 #include <utility>
 #include <algorithm>
+#include <sstream>
 #include <tuple>
 
 using namespace cerebellum;
@@ -222,8 +223,8 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 			State nu = u;
 			bool to_avoid = false;
 			for(const transition_p t : tb.second){
+				tcost += t->cost(nu);
 				nu = nu.move(t);
-				tcost += t->cost;
 
 				/* check if this state needs to be avoided */
 				for(State obst : avoid){
@@ -237,8 +238,8 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 			/* after arriving, apply all non-conflicting natural transitions */
 			list<transition_p> t_natural = nonconflicting_natural_transitions_from(nu);
 			for(const transition_p nt : t_natural){
+				tcost += nt->cost(nu);
 				nu = nu.move(nt);
-				tcost += nt->cost;
 
 				/* check if this state needs to be avoided */
 				for(State obst : avoid){
@@ -277,7 +278,7 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 			}
 
 			if(tb.second.empty()){
-				transition_p no_action = Transition::create_controlled("", u, u, 0, 0);
+				transition_p no_action = Transition::create_controlled(tb.first, u, u, 0, 1);
 				transitions_in_path.push_front(no_action);
 			}else{
 				for(const transition_p t : tb.second){
@@ -402,15 +403,15 @@ Path StateModel::path_find_b3(const State from, const State to, vector<State> av
 			bool to_avoid = false;
 
 			if(tb.second.empty()){
-				transition_p no_action = Transition::create_controlled("", u, u, 0, 0);
+				transition_p no_action = Transition::create_controlled(tb.first, u, u, 0, 1);
 				path_after_controlled <<= no_action;
 				/* no need to check obstacles here */
 			}else{
 				for(const transition_p t : tb.second){
 					state_after_controlled = state_after_controlled.move(t);
 					path_after_controlled <<= t;
-					cost_after_controlled += t->cost;
-					prob_after_controlled *= t->probability;
+					cost_after_controlled += t->cost(u);
+					prob_after_controlled *= t->probability(u);
 
 					/* check if this state needs to be avoided */
 					for(const State& ob : avoid){
@@ -454,8 +455,8 @@ Path StateModel::path_find_b3(const State from, const State to, vector<State> av
 					for(auto nt : t_naturals){
 						next_state = next_state.move(nt);
 						next_path <<= nt;
-						next_cost += nt->cost;
-						next_prob *= nt->probability;
+						next_cost += nt->cost(state_after_controlled);
+						next_prob *= nt->probability(state_after_controlled);
 						
 						/* check if this state needs to be avoided */
 						for(const State& ob : avoid){
@@ -556,7 +557,7 @@ vector<Path> StateModel::_recursive_dfs(const State from, const State to, vector
 			/* if allowed to wait, only do so if there are non-trivial natural transitions afterwards */
 			if(tb.second.empty()){
 				if(!all_t_natural.empty()){
-					transition_p no_action = Transition::create_controlled("", from, from, 0, 0, 1);
+					transition_p no_action = Transition::create_controlled(tb.first, from, from, 0, 1);
 					inst_path_controlled <<= no_action;
 				}else{
 					continue;
@@ -760,7 +761,7 @@ set<list<transition_p>> StateModel::_recursive_expand_possible_transitions(const
 
 	if(t->available_at(x)){
 		/* add the no-fail case */
-		if(t->probability > 0){
+		if(t->probability(x) > 0){
 			set<list<transition_p>> sub_possibilities = _recursive_expand_possible_transitions(x.move(t), next_t_to_go);
 			if(sub_possibilities.empty()){
 				list<transition_p> l;
@@ -776,7 +777,7 @@ set<list<transition_p>> StateModel::_recursive_expand_possible_transitions(const
 		}
 
 		/* add the fail case */
-		if(t->probability < 1){
+		if(t->probability(x) < 1){
 			set<list<transition_p>> sub_possibilities = _recursive_expand_possible_transitions(x, next_t_to_go);
 			if(sub_possibilities.empty()){
 				list<transition_p> l;
@@ -822,6 +823,190 @@ set<list<transition_p>> StateModel::all_potential_natural_transitions_from(const
 	}
 
 	return _recursive_expand_possible_transitions(from, ntl);
+}
+
+string StateModel::as_dot_file() const {
+	stringstream ss;
+
+	// headers
+	ss << "digraph cerebellum {" << endl;
+
+	// global styles
+	ss << "\tnewrank=true" << endl;
+
+	// data sources as states
+	vector<transition_p> pure_transitions;
+	map<DataSource, vector<transition_p>> data_transitions_map;
+	set<DataSource> sources;
+	for(auto t : transitions){
+		for(auto af : t->from.components){
+			if(af->type() == AtomicStateType::INT_DATA){
+				DataState& ff = static_cast<DataState&>(*af);
+				sources.insert(ff.source);
+			}else{
+				pure_transitions.push_back(t);
+			}
+		}
+		for(auto at : t->to.components){
+			if(at->type() == AtomicStateType::INT_DATA){
+				DataState& tt = static_cast<DataState&>(*at);
+				sources.insert(tt.source);
+				data_transitions_map[tt.source].push_back(t);
+			}
+		}
+	}
+
+	// data state clusters
+	for(auto s : sources){
+		ss << "\tsubgraph cluster_" << s->name << " {" << endl;
+		
+		// states, with shortened labels
+		ss << "\t\tlabel=" << s->name << endl;
+		for(int i = s->upper_bound; i >= s->lower_bound; i--){
+			ss << "\t\t\"" << s->name << " = " << i << "\" [label=" << i << "]" << endl;
+		}
+
+		// data state transitions
+		for(auto t : data_transitions_map[s]){
+			for(int k = 0; k < t->from.components.size(); k++){
+				// assuming from and to states have the same dimension (which it should)
+				DataState& ff = static_cast<DataState&>(*(t->from.components[k]));
+				DataState& tt = static_cast<DataState&>(*(t->to.components[k]));
+				vector<int> from_values;
+				if(ff.qualifier == DataState::NONE){
+					// from any value
+					for(int c = s->lower_bound; c <= s->upper_bound; c++){
+						from_values.push_back(c);
+					}
+				}else if(ff.qualifier == DataState::EQUALS){
+					// from one specific value
+					from_values.push_back(ff.value);
+				}else if(ff.qualifier == DataState::GREATER_THAN){
+					for(int c = ff.value + 1; c <= s->upper_bound; c++){
+						from_values.push_back(c);
+					}
+				}else if(ff.qualifier == DataState::GREATER_THAN_EQUALS){
+					for(int c = ff.value; c <= s->upper_bound; c++){
+						from_values.push_back(c);
+					}
+				}else if(ff.qualifier == DataState::LESS_THAN){
+					for(int c = ff.value - 1; c >= s->lower_bound; c--){
+						from_values.push_back(c);
+					}
+				}else if(ff.qualifier == DataState::LESS_THAN_EQUALS){
+					for(int c = ff.value; c >= s->lower_bound; c--){
+						from_values.push_back(c);
+					}
+				}else if(ff.qualifier == DataState::NOT_EQUALS){
+					for(int c = s->lower_bound; c <= s->upper_bound; c++){
+						if(c != ff.value){
+							from_values.push_back(c);
+						}
+					}
+				}
+
+				for(int fv : from_values){
+					if(tt.qualifier == DataState::NONE){
+						// value change
+						int tv = fv + tt.value;
+						if(tv < s->lower_bound || tv > s->upper_bound){
+							// saturated, skip
+							continue;
+						}
+						ss << "\t\t\"" << s->name << " = " << fv << "\" -> \"" << s->name << " = " << tv << "\" [ ";
+					}else if(tt.qualifier == DataState::EQUALS){
+						// value set
+						ss << "\t\t\"" << s->name << " = " << fv << "\" -> \"" << s->name << " = " << tt.value << "\" [ ";
+					}
+					if(!t->controllable){
+						ss << "color=red ";
+					}
+					if(!t->conditions.empty()){
+						ss << "arrowhead=empty ";
+					}
+					if(t->base_probability < 1 || !t->conditional_probabilities.empty()){
+						ss << "style=dashed ";
+					}
+					ss << "tooltip=\"";
+					if(!t->conditions.empty()){
+						if(t->active_conditions){
+							ss << "activated";
+						}else{
+							ss << "inhibited";
+						}
+						for(auto cs : t->conditions){
+							ss << " " << cs;
+						}
+						ss << "\\n";
+					}
+					ss << "cost: " << t->base_cost;
+					for(auto sc : t->conditional_costs){
+						ss << ", " << sc.second << " at " << sc.first;
+					}
+					ss << "\\nprob: " << t->base_probability;
+					for(auto sp : t->conditional_probabilities){
+						ss << ", " << sp.second << " at " << sp.first;
+					}
+					ss << "\"]" << endl;
+				}
+			}
+		}
+
+		ss << "\t}" << endl;
+	}
+
+	// transitions betweeen pure states
+	for(auto t : pure_transitions){
+		ss << "\t{\" ";
+		for(auto af : t->from.components){
+			if(af->type() == AtomicStateType::PURE){
+				ss << af->label << " ";
+			}
+		}
+		ss << "\"} -> {\" ";
+		for(auto at : t->to.components){
+			if(at->type() == AtomicStateType::PURE){
+				ss << at->label << " ";
+			}
+		}
+		ss << "\"} [ ";
+		ss << "label=\"" << t->label << "\" ";
+
+		if(!t->controllable){
+			ss << "color=red ";
+		}
+		if(!t->conditions.empty()){
+			ss << "arrowhead=empty ";
+		}
+		if(t->base_probability < 1 || !t->conditional_probabilities.empty()){
+			ss << "style=dashed ";
+		}
+		ss << "tooltip=\"";
+		if(!t->conditions.empty()){
+			if(t->active_conditions){
+				ss << "activated";
+			}else{
+				ss << "inhibited";
+			}
+			for(auto cs : t->conditions){
+				ss << " " << cs;
+			}
+			ss << "\\n";
+		}
+		ss << "cost: " << t->base_cost;
+		for(auto sc : t->conditional_costs){
+			ss << ", " << sc.second << " at " << sc.first;
+		}
+		ss << "\\nprob: " << t->base_probability;
+		for(auto sp : t->conditional_probabilities){
+			ss << ", " << sp.second << " at " << sp.first;
+		}
+		ss << "\"]" << endl;
+	}
+
+	ss << "}";
+
+	return ss.str();
 }
 
 //-----------------------------------------------------------------------------

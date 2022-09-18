@@ -250,7 +250,7 @@ ostream& cerebellum::operator<<(ostream& os, const State& s) {
 
 //-----------------------------------------------------------------------------
 
-vector<string> qualifier_names({"=", "!=", "<", ">", "<=", ">=", "*"});
+vector<string> qualifier_names({"=", "!=", "<", "<=", ">", ">=", "*"});
 
 DataState::DataState(DataSource source, DataState::Qualifier qualifier, int value) :
 AtomicState("" + source->name + " " + qualifier_names[qualifier] + " " + to_string(value), 

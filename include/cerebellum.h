@@ -120,6 +120,7 @@ protected:
 
 	std::vector<astate_p> components;
 	friend class Transition;
+	friend class StateModel;
 
 };
 
@@ -157,14 +158,25 @@ public:
 	void inhibit(const astate_p);
 	void inhibit(std::initializer_list<astate_p>);
 
+	void set_probability_at(const State&, double);
+	void set_probability_at(const astate_p, double);
+	void set_probability_at(std::initializer_list<astate_p>, double);
+
+	void set_cost_at(const State&, double);
+	void set_cost_at(const astate_p, double);
+	void set_cost_at(std::initializer_list<astate_p>, double);
+
+	double cost(const State&) const;
+	double probability(const State&) const;
+
 	const std::string label;
 
 	const State from;
 	const State to;
 
 	const bool controllable;
-	const double cost;
-	const double probability;
+	const double base_cost;
+	const double base_probability;
 	const int priority;
 
 	/* pointer to a utility transition that represents the failure to complete */
@@ -172,13 +184,17 @@ public:
 
 protected:
 
-	std::vector<std::set<State>> conditions;
+	std::set<State> conditions;
 	bool active_conditions;
+
+	std::list<std::pair<State, double>> conditional_costs;
+	std::list<std::pair<State, double>> conditional_probabilities;
 
 	Transition(std::string label, const State& from, const State& to, 
 				bool controllable, double cost, double probability, 
 				int level, bool active_conditions);
 
+	friend class StateModel;
 };
 
 //-----------------------------------------------------------------------------
@@ -249,6 +265,8 @@ public:
 	virtual ~StateModel() = default;
 
 	const std::set<transition_p> transitions;
+
+	std::string as_dot_file() const;
 
 	/** Find a single cost-optimal path using Djikstra's algorithm **/
 	Path find_path(const State from, const State to);
@@ -339,7 +357,7 @@ protected:
 	std::set<std::list<transition_p>> all_potential_natural_transitions_from(const State from);
 
 	/* follow a series of natural transitions from state x until a conflict arises or all transitions are used */
-	std::set<std::list<transition_p>> _recursive_expand_possible_transitions(const State x, std::list<transition_p> nt_to_go);
+	std::set<std::list<transition_p>> _recursive_expand_possible_transitions(const State x, std::list<transition_p> t_to_go);
 
 };
 

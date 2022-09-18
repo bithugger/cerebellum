@@ -450,18 +450,17 @@ void b3_test(){
 	transition_p tbcf = Transition::create_natural("b_to_c_fast", b, c, 1.0, 1.0);
 	tbcf->activate({f, w});
 
-	transition_p twk = Transition::create_natural("breakdown_slow", w, k, 0.1, 1.0, 1);
+	transition_p twk = Transition::create_natural("breakdown", w, k, 0.1, 1.0, 1);
 	twk->activate(m);
-
-	transition_p twkf = Transition::create_natural("breakdown_fast", w, k, 0.3, 1.0, 1);
-	twkf->activate(f);
+	twk->activate(f);
+	twk->set_probability_at(f, 0.3);
 
 	transition_p tsm = Transition::create_controlled("move_slow", s, m);
 	transition_p tms = Transition::create_controlled("stop_slow", m, s);
 	transition_p tsf = Transition::create_controlled("move_fast", s, f);
 	transition_p tfs = Transition::create_controlled("stop_fast", f, s);
 
-	StateModel model({tab, tbc, twk, tsm, tms, tabf, tbcf, tsf, tfs, twkf});
+	StateModel model({tab, tbc, twk, tsm, tms, tabf, tbcf, tsf, tfs});
 
 	Path p = model.find_best_path_over_likelihood(State({a, s, w}), State(c), 0.0);
 	cout << "B3 path-finding lowest cost with over 0% likelihood" << endl;
