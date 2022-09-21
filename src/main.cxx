@@ -401,7 +401,7 @@ void prob_test(){
 	transition_p tbc = Transition::create_natural("b_to_c", b, c);
 	tbc->activate({m, w});
 
-	transition_p twk = Transition::create_natural("breakdown", w, k, 0.3);
+	transition_p twk = Transition::create_natural("breakdown", w, k, 0.3, 0, 1);
 	twk->activate(m);
 
 	transition_p tsm = Transition::create_controlled("move", s, m);
@@ -450,14 +450,14 @@ void b3_test(){
 	transition_p tbcf = Transition::create_natural("b_to_c_fast", b, c, 1.0, 1.0);
 	tbcf->activate({f, w});
 
-	transition_p twk = Transition::create_natural("breakdown", w, k, 0.1, 1.0, 1);
+	transition_p twk = Transition::create_natural("breakdown", w, k, 0.1, 0, 1);
 	twk->activate(m);
 	twk->activate(f);
 	twk->set_probability_at(f, 0.3);
 
 	transition_p tsm = Transition::create_controlled("move_slow", s, m);
 	transition_p tms = Transition::create_controlled("stop_slow", m, s);
-	transition_p tsf = Transition::create_controlled("move_fast", s, f);
+	transition_p tsf = Transition::create_controlled("move_fast", s, f, 1, 0.9);
 	transition_p tfs = Transition::create_controlled("stop_fast", f, s);
 
 	StateModel model({tab, tbc, twk, tsm, tms, tabf, tbcf, tsf, tfs});
@@ -485,6 +485,13 @@ void b3_test(){
 	print_path(p);
 	cout << " - " << p.probability*100 << "% chance of success, cost " << p.cost << endl;
 	cout << endl;
+
+	vector<PathWay> ps = model.find_all_pathways(State({a, s, w}), State(c));
+	cout << "DFS path-finding all paths" << endl;
+	for(const PathWay& pw : ps){
+		print_path(pw);
+		cout << " - " << pw.probability*100 << "% chance of success, cost " << pw.cost << endl;
+	}
 }
 
 int main(){

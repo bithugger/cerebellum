@@ -266,6 +266,7 @@ public:
 
 	const std::set<transition_p> transitions;
 
+	/** Output a string containing text input to GraphViz for visualization **/
 	std::string as_dot_file() const;
 
 	/** Find a single cost-optimal path using Djikstra's algorithm **/
@@ -341,20 +342,19 @@ protected:
 	std::vector<PathWay> pathway_find_dfs(const State from, const State to, std::vector<State> avoid);
 
 	/** returns all enabled transitions from a given state **/
-	std::map<std::string, std::set<transition_p>> all_transitions_from(const State from);
+	std::list<transition_p> all_transitions_from(const State from);
 
-	std::map<std::string, std::set<transition_p>> natural_transitions_from(const State from);
+	std::list<transition_p> natural_transitions_from(const State from);
 
-	std::map<std::string, std::set<transition_p>> controlled_transitions_from(const State from);
-
-	/** since transitions are applied one at a time, a later transition may become unavailable
-	 * after a move. this function finds the sequence of natural transitions, sorted by priority,
-	 * until either all transitions are applied or a conflict from states arises */
-	std::list<transition_p> nonconflicting_natural_transitions_from(const State from);
+	std::map<std::string, std::list<transition_p>> controlled_transitions_from(const State from);
 
 	/** some natural transitions can fail, leading to alternatives in terms of nonconflicting
 	 * pathways. this function computes all potential paths */
 	std::set<std::list<transition_p>> all_potential_natural_transitions_from(const State from);
+
+	/** some controlled transitions can fail, leading to alternatives in terms of nonconflicting
+	 * pathways. this function computes all potential paths for each control input */
+	std::map<std::string, std::set<std::list<transition_p>>> all_potential_controlled_transitions_from(const State from);
 
 	/* follow a series of natural transitions from state x until a conflict arises or all transitions are used */
 	std::set<std::list<transition_p>> _recursive_expand_possible_transitions(const State x, std::list<transition_p> t_to_go);

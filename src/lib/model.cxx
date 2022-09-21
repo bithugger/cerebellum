@@ -32,7 +32,7 @@ using namespace cerebellum;
 using namespace std;
 
 
-typedef pair<string, set<transition_p>> transition_bundle;
+typedef pair<string, list<transition_p>> transition_bundle;
 typedef pair<transition_bundle, list<transition_p>> move_pair;
 
 //-----------------------------------------------------------------------------
@@ -215,7 +215,7 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 		visited_states.insert(u);
 
 		/* find available controlled transitions */
-		map<string, set<transition_p>> t_controlled = controlled_transitions_from(u);
+		map<string, list<transition_p>> t_controlled = controlled_transitions_from(u);
 		/* see where they go */
 		for(const transition_bundle& tb : t_controlled){
 			/* determine the cost, probability, and destination of this move */
@@ -223,12 +223,14 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 			State nu = u;
 			bool to_avoid = false;
 			for(const transition_p t : tb.second){
-				tcost += t->cost(nu);
-				nu = nu.move(t);
+				if(nu.accepts(t)){
+					tcost += t->cost(nu);
+					nu = nu.move(t);
 
-				/* check if this state needs to be avoided */
-				for(State obst : avoid){
-					to_avoid |= nu.contains(obst);
+					/* check if this state needs to be avoided */
+					for(State obst : avoid){
+						to_avoid |= nu.contains(obst);
+					}
 				}
 			}
 
@@ -236,14 +238,16 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 			/* this option should be parametrized */
 
 			/* after arriving, apply all non-conflicting natural transitions */
-			list<transition_p> t_natural = nonconflicting_natural_transitions_from(nu);
+			list<transition_p> t_natural = natural_transitions_from(nu);
 			for(const transition_p nt : t_natural){
-				tcost += nt->cost(nu);
-				nu = nu.move(nt);
+				if(nu.accepts(nt)){
+					tcost += nt->cost(nu);
+					nu = nu.move(nt);
 
-				/* check if this state needs to be avoided */
-				for(State obst : avoid){
-					to_avoid |= nu.contains(obst);
+					/* check if this state needs to be avoided */
+					for(State obst : avoid){
+						to_avoid |= nu.contains(obst);
+					}
 				}
 			}
 
@@ -392,97 +396,102 @@ Path StateModel::path_find_b3(const State from, const State to, vector<State> av
 
 		/* explore neighbouring states from here */
 		/* find available controlled transitions */
-		map<string, set<transition_p>> t_controlled = controlled_transitions_from(u);
+		map<string, set<list<transition_p>>> all_tc_sets = all_potential_controlled_transitions_from(u);
 		/* see where they go */
-		for(const transition_bundle& tb : t_controlled){
-			/* determine the cost, probability, and destination of this move */
-			double cost_after_controlled = cost_so_far;
-			double prob_after_controlled = prob_so_far;
-			Path path_after_controlled = path_so_far;
-			State state_after_controlled = u;
-			bool to_avoid = false;
+		for(auto tc_set : all_tc_sets){
+			/* go through each possibility */
+			for(const list<transition_p> tcs : tc_set.second){
+				/* determine the cost, probability, and destination of this move */
+				double cost_after_controlled = cost_so_far;
+				double prob_after_controlled = prob_so_far;
+				Path path_after_controlled = path_so_far;
+				State state_after_controlled = u;
+				bool to_avoid = false;
 
-			if(tb.second.empty()){
-				transition_p no_action = Transition::create_controlled(tb.first, u, u, 0, 1);
-				path_after_controlled <<= no_action;
-				/* no need to check obstacles here */
-			}else{
-				for(const transition_p t : tb.second){
-					state_after_controlled = state_after_controlled.move(t);
-					path_after_controlled <<= t;
-					cost_after_controlled += t->cost(u);
-					prob_after_controlled *= t->probability(u);
+				if(tcs.empty()){
+					transition_p no_action = Transition::create_controlled(tc_set.first, u, u, 0, 1);
+					path_after_controlled <<= no_action;
+					/* no need to check obstacles here */
+				}else{
+					for(const transition_p t : tcs){
+						if(state_after_controlled.accepts(t)){
+							state_after_controlled = state_after_controlled.move(t);
+							path_after_controlled <<= t;
+							cost_after_controlled += t->cost(u);
+							prob_after_controlled *= t->probability(u);
 
-					/* check if this state needs to be avoided */
-					for(const State& ob : avoid){
-						to_avoid |= state_after_controlled.contains(ob);
-					}
-				}
-			}
-
-			/* after arriving, find all possible subsequent natural transitions */
-			set<list<transition_p>> all_t_natural = all_potential_natural_transitions_from(state_after_controlled);
-
-			if(all_t_natural.empty()){
-				/* no natural transitions from here, just add the state after controlled */
-				if(visited_states.find(state_after_controlled) == visited_states.end()){
-					if(prob_after_controlled >= probability_limit && cost_after_controlled <= cost_limit){
-						path_solver_state x{state_after_controlled, cost_after_controlled, prob_after_controlled, path_after_controlled};
-						neighbour_state_heap.push_back(x);
-						if(use_cost_comp){
-							push_heap(neighbour_state_heap.begin(), neighbour_state_heap.end(), cost_comparator);
-						}else{
-							push_heap(neighbour_state_heap.begin(), neighbour_state_heap.end(), prob_comparator);
-						}
-						if(lowest_cost_to_reach_state.find(state_after_controlled) == lowest_cost_to_reach_state.end() ||
-							lowest_cost_to_reach_state[state_after_controlled] > cost_after_controlled){
-							lowest_cost_to_reach_state[state_after_controlled] = cost_after_controlled;
-						}
-						if(highest_prob_to_reach_state.find(state_after_controlled) == highest_prob_to_reach_state.end() ||
-							highest_prob_to_reach_state[state_after_controlled] < prob_after_controlled){
-							highest_prob_to_reach_state[state_after_controlled] = prob_after_controlled;
+							/* check if this state needs to be avoided */
+							for(const State& ob : avoid){
+								to_avoid |= state_after_controlled.contains(ob);
+							}
 						}
 					}
 				}
-			}else{
-				for(auto t_naturals : all_t_natural){
-					State next_state = state_after_controlled;
-					Path next_path = path_after_controlled;
-					double next_cost = cost_after_controlled;
-					double next_prob = prob_after_controlled;
 
-					bool to_avoid = false;
-					for(auto nt : t_naturals){
-						next_state = next_state.move(nt);
-						next_path <<= nt;
-						next_cost += nt->cost(state_after_controlled);
-						next_prob *= nt->probability(state_after_controlled);
-						
-						/* check if this state needs to be avoided */
-						for(const State& ob : avoid){
-							to_avoid |= next_state.contains(ob);
-						}
-					}
+				/* after arriving, find all possible subsequent natural transitions */
+				set<list<transition_p>> all_t_natural = all_potential_natural_transitions_from(state_after_controlled);
 
-					/* at the end, check if this state has already been visited */
-					to_avoid |= visited_states.find(next_state) != visited_states.end();
-
-					if(!to_avoid){
-						if(next_prob >= probability_limit && next_cost <= cost_limit){
-							path_solver_state x{next_state, next_cost, next_prob, next_path};
+				if(all_t_natural.empty()){
+					/* no natural transitions from here, just add the state after controlled */
+					if(visited_states.find(state_after_controlled) == visited_states.end()){
+						if(prob_after_controlled >= probability_limit && cost_after_controlled <= cost_limit){
+							path_solver_state x{state_after_controlled, cost_after_controlled, prob_after_controlled, path_after_controlled};
 							neighbour_state_heap.push_back(x);
 							if(use_cost_comp){
 								push_heap(neighbour_state_heap.begin(), neighbour_state_heap.end(), cost_comparator);
 							}else{
 								push_heap(neighbour_state_heap.begin(), neighbour_state_heap.end(), prob_comparator);
 							}
-							if(lowest_cost_to_reach_state.find(next_state) == lowest_cost_to_reach_state.end() ||
-								lowest_cost_to_reach_state[next_state] > next_cost){
-								lowest_cost_to_reach_state[next_state] = next_cost;
+							if(lowest_cost_to_reach_state.find(state_after_controlled) == lowest_cost_to_reach_state.end() ||
+								lowest_cost_to_reach_state[state_after_controlled] > cost_after_controlled){
+								lowest_cost_to_reach_state[state_after_controlled] = cost_after_controlled;
 							}
-							if(highest_prob_to_reach_state.find(next_state) == highest_prob_to_reach_state.end() ||
-								highest_prob_to_reach_state[next_state] < next_prob){
-								highest_prob_to_reach_state[next_state] = next_prob;
+							if(highest_prob_to_reach_state.find(state_after_controlled) == highest_prob_to_reach_state.end() ||
+								highest_prob_to_reach_state[state_after_controlled] < prob_after_controlled){
+								highest_prob_to_reach_state[state_after_controlled] = prob_after_controlled;
+							}
+						}
+					}
+				}else{
+					for(auto t_naturals : all_t_natural){
+						State next_state = state_after_controlled;
+						Path next_path = path_after_controlled;
+						double next_cost = cost_after_controlled;
+						double next_prob = prob_after_controlled;
+
+						bool to_avoid = false;
+						for(auto nt : t_naturals){
+							next_state = next_state.move(nt);
+							next_path <<= nt;
+							next_cost += nt->cost(state_after_controlled);
+							next_prob *= nt->probability(state_after_controlled);
+							
+							/* check if this state needs to be avoided */
+							for(const State& ob : avoid){
+								to_avoid |= next_state.contains(ob);
+							}
+						}
+
+						/* at the end, check if this state has already been visited */
+						to_avoid |= visited_states.find(next_state) != visited_states.end();
+
+						if(!to_avoid){
+							if(next_prob >= probability_limit && next_cost <= cost_limit){
+								path_solver_state x{next_state, next_cost, next_prob, next_path};
+								neighbour_state_heap.push_back(x);
+								if(use_cost_comp){
+									push_heap(neighbour_state_heap.begin(), neighbour_state_heap.end(), cost_comparator);
+								}else{
+									push_heap(neighbour_state_heap.begin(), neighbour_state_heap.end(), prob_comparator);
+								}
+								if(lowest_cost_to_reach_state.find(next_state) == lowest_cost_to_reach_state.end() ||
+									lowest_cost_to_reach_state[next_state] > next_cost){
+									lowest_cost_to_reach_state[next_state] = next_cost;
+								}
+								if(highest_prob_to_reach_state.find(next_state) == highest_prob_to_reach_state.end() ||
+									highest_prob_to_reach_state[next_state] < next_prob){
+									highest_prob_to_reach_state[next_state] = next_prob;
+								}
 							}
 						}
 					}
@@ -526,93 +535,97 @@ vector<Path> StateModel::_recursive_dfs(const State from, const State to, vector
 		return paths;
 	}else{
 		/* find available controlled transitions */
-		map<string, set<transition_p>> t_controlled = controlled_transitions_from(from);
-		/* see where they go */
-		for(const transition_bundle& tb : t_controlled){
-			Path inst_path_controlled(from);
-			State state_after_controlled = from;
+		map<string, set<list<transition_p>>> all_tc_set = all_potential_controlled_transitions_from(from);
 
-			bool blocked = false;
+		for(auto tc_set : all_tc_set){
+			for(const list<transition_p> tcs : tc_set.second){
+				Path inst_path_controlled(from);
+				State state_after_controlled = from;
 
-			/* determine the cost and destination of this move */
-			for(const transition_p t : tb.second){
-				state_after_controlled = state_after_controlled.move(t);
-				inst_path_controlled <<= t;
+				bool blocked = false;
 
-				/* check if this state needs to be avoided */
-				for(State obst : avoid){
-					blocked |= state_after_controlled.contains(obst);
-				}
-			}
+				/* determine the cost and destination of this move */
+				for(const transition_p t : tcs){
+					if(state_after_controlled.accepts(t)){
+						state_after_controlled = state_after_controlled.move(t);
+						inst_path_controlled <<= t;
 
-			/* TODO check destination reached, although transient? */
-			/* this option should be parametrized */
-			if(blocked){
-				continue;
-			}
-
-			/* after arriving, find all possible subsequent natural transitions */
-			set<list<transition_p>> all_t_natural = all_potential_natural_transitions_from(state_after_controlled);
-
-			/* if allowed to wait, only do so if there are non-trivial natural transitions afterwards */
-			if(tb.second.empty()){
-				if(!all_t_natural.empty()){
-					transition_p no_action = Transition::create_controlled(tb.first, from, from, 0, 1);
-					inst_path_controlled <<= no_action;
-				}else{
-					continue;
-				}
-			}
-
-			vector<State> next_states;
-			vector<Path> next_inst_paths;
-			if(all_t_natural.empty()){
-				/* no natural transitions from here, just add the state after controlled */
-				if(visited.find(state_after_controlled) == visited.end()){
-					next_states.push_back(state_after_controlled);
-					next_inst_paths.push_back(inst_path_controlled);
-				}
-			}else{
-				for(auto t_naturals : all_t_natural){
-					State next = state_after_controlled;
-					Path inst_path = inst_path_controlled;
-
-					bool to_avoid = false;
-					for(auto nt : t_naturals){
-						next = next.move(nt);
-						inst_path <<= nt;
-						
 						/* check if this state needs to be avoided */
 						for(State obst : avoid){
-							to_avoid |= next.contains(obst);
+							blocked |= state_after_controlled.contains(obst);
 						}
 					}
+				}
 
-					/* at the end, check if this state has already been visited */
-					for(State rep : visited){
-						to_avoid |= (next == rep);
-					}
+				/* TODO check destination reached, although transient? */
+				/* this option should be parametrized */
+				if(blocked){
+					continue;
+				}
 
-					if(!to_avoid){
-						next_states.push_back(next);
-						next_inst_paths.push_back(inst_path);
+				/* after arriving, find all possible subsequent natural transitions */
+				set<list<transition_p>> all_t_natural = all_potential_natural_transitions_from(state_after_controlled);
+
+				/* if allowed to wait, only do so if there are non-trivial natural transitions afterwards */
+				if(tcs.empty()){
+					if(!all_t_natural.empty()){
+						transition_p no_action = Transition::create_controlled(tc_set.first, from, from, 0, 1);
+						inst_path_controlled <<= no_action;
+					}else{
+						continue;
 					}
 				}
-			}
 
-			for(size_t i = 0; i < next_states.size(); i++){
-				State next = next_states[i];
-				Path inst_path = next_inst_paths[i];
+				vector<State> next_states;
+				vector<Path> next_inst_paths;
+				if(all_t_natural.empty()){
+					/* no natural transitions from here, just add the state after controlled */
+					if(visited.find(state_after_controlled) == visited.end()){
+						next_states.push_back(state_after_controlled);
+						next_inst_paths.push_back(inst_path_controlled);
+					}
+				}else{
+					for(auto t_naturals : all_t_natural){
+						State next = state_after_controlled;
+						Path inst_path = inst_path_controlled;
 
-				/* add the neighbors to the known state set */
-				set<State> next_visited = visited;
-				next_visited.insert(next);
+						bool to_avoid = false;
+						for(auto nt : t_naturals){
+							next = next.move(nt);
+							inst_path <<= nt;
+							
+							/* check if this state needs to be avoided */
+							for(State obst : avoid){
+								to_avoid |= next.contains(obst);
+							}
+						}
 
-				/* recursion */
-				Path next_path = path_so_far << inst_path;
-				vector<Path> viable_paths = _recursive_dfs(next, to, avoid, next_visited, next_path, false);
+						/* at the end, check if this state has already been visited */
+						for(State rep : visited){
+							to_avoid |= (next == rep);
+						}
 
-				paths.insert(paths.end(), viable_paths.begin(), viable_paths.end());
+						if(!to_avoid){
+							next_states.push_back(next);
+							next_inst_paths.push_back(inst_path);
+						}
+					}
+				}
+
+				for(size_t i = 0; i < next_states.size(); i++){
+					State next = next_states[i];
+					Path inst_path = next_inst_paths[i];
+
+					/* add the neighbors to the known state set */
+					set<State> next_visited = visited;
+					next_visited.insert(next);
+
+					/* recursion */
+					Path next_path = path_so_far << inst_path;
+					vector<Path> viable_paths = _recursive_dfs(next, to, avoid, next_visited, next_path, false);
+
+					paths.insert(paths.end(), viable_paths.begin(), viable_paths.end());
+				}
 			}
 		}
 		return paths;
@@ -679,74 +692,81 @@ vector<PathWay> StateModel::pathway_find_dfs(const State from, const State to, v
 	}
 }
 
-map<string, set<transition_p>> StateModel::all_transitions_from(const State from){
-	map<string, set<transition_p>> tm;
+list<transition_p> StateModel::all_transitions_from(const State from){
+	list<transition_p> tl;
 
 	for(const transition_p t : transitions){
 		/* check transition conditions */
-		if(from.contains(t->from) && t->available_at(from)){
-			tm[t->label].insert(t);
-		}
-	}
-
-	return tm;
-}
-
-map<string, set<transition_p>> StateModel::natural_transitions_from(const State from){
-	map<string, set<transition_p>> tm;
-
-	for(const transition_p t : transitions){
-		/* check transition conditions */
-		if(!t->controllable && from.contains(t->from) && t->available_at(from)){
-			tm[t->label].insert(t);
-		}
-	}
-
-	return tm;
-}
-
-map<string, set<transition_p>> StateModel::controlled_transitions_from(const State from){
-	map<string, set<transition_p>> tm;
-
-	for(const transition_p t : transitions){
-		/* check transition conditions */
-		if(t->controllable && from.contains(t->from) && t->available_at(from)){
-			tm[t->label].insert(t);
-		}
-	}
-
-	if(allow_wait){
-		tm.insert({"", set<transition_p>()});
-	}
-
-	return tm;
-}
-
-list<transition_p> StateModel::nonconflicting_natural_transitions_from(const State from){
-	map<string, set<transition_p>> tm = natural_transitions_from(from);
-	/** map sorts entries by key, so this is automatically sorted by level */
-	map<unsigned int, set<transition_p>> nt_level_map;
-
-	for(auto& kv : tm){
-	 	for(const transition_p t : kv.second){
-	 		nt_level_map[t->priority].insert(t);
-	 	}
-	}
-
-	/* these transitions should all be applied, but some may become unavailable during the motion.
-	 * successively apply each priority of transitions until all are applied or conflict arises */
-	State k(from);
-	list<transition_p> ntl;
-	for(auto& ntp_kv : nt_level_map){
-		for(auto& nt : ntp_kv.second){
-			if(nt->available_at(k)){
-				ntl.push_back(nt);
-				k = k.move(nt);
+		if(from.accepts(t)){
+			/* keep this list sorted according to priority */
+			bool added = false;
+			for(auto it = tl.begin(); it != tl.end(); ++it){
+				if((*it)->priority < t->priority){
+					tl.insert(it, t);
+					added = true;
+					break;
+				}
+			}
+			if(!added){
+				tl.push_back(t);
 			}
 		}
 	}
 
-	return ntl;
+
+	return tl;
+}
+
+list<transition_p> StateModel::natural_transitions_from(const State from){
+	list<transition_p> tl;
+
+	for(const transition_p t : transitions){
+		/* check transition conditions */
+		if(!t->controllable && from.accepts(t)){
+			/* keep this list sorted according to priority */
+			bool added = false;
+			for(auto it = tl.begin(); it != tl.end(); ++it){
+				if((*it)->priority < t->priority){
+					tl.insert(it, t);
+					added = true;
+					break;
+				}
+			}
+			if(!added){
+				tl.push_back(t);
+			}
+		}
+	}
+
+	return tl;
+}
+
+map<string, list<transition_p>> StateModel::controlled_transitions_from(const State from){
+	map<string, list<transition_p>> tm;
+
+	for(const transition_p t : transitions){
+		/* check transition conditions */
+		if(t->controllable && from.accepts(t)){
+			/* keep this list sorted according to priority */
+			bool added = false;
+			for(auto it = tm[t->label].begin(); it != tm[t->label].end(); ++it){
+				if((*it)->priority < t->priority){
+					tm[t->label].insert(it, t);
+					added = true;
+					break;
+				}
+			}
+			if(!added){
+				tm[t->label].push_back(t);
+			}
+		}
+	}
+
+	if(allow_wait){
+		tm.insert({"", list<transition_p>()});
+	}
+
+	return tm;
 }
 
 set<list<transition_p>> StateModel::_recursive_expand_possible_transitions(const State x, list<transition_p> t_to_go){
@@ -802,27 +822,27 @@ set<list<transition_p>> StateModel::_recursive_expand_possible_transitions(const
 set<list<transition_p>> StateModel::all_potential_natural_transitions_from(const State from){
 	/** some natural transitions can fail, leading to alternatives in terms of nonconflicting
 	 * pathways. this function computes all potential paths */
-	map<string, set<transition_p>> tm = natural_transitions_from(from);
-	/** high priority/low level transitions to be applied first */
-	/** map sorts entries by key, so this is automatically sorted by level */
-	map<unsigned int, set<transition_p>> nt_level_map;
+	list<transition_p> tl = natural_transitions_from(from);
 
+	return _recursive_expand_possible_transitions(from, tl);
+}
+
+map<string, set<list<transition_p>>> StateModel::all_potential_controlled_transitions_from(const State from){
+	/** some controlled transitions can fail, leading to alternatives in terms of nonconflicting
+	 * pathways. this function computes all potential paths for each control input */
+	map<string, list<transition_p>> tm = controlled_transitions_from(from);
+
+	map<string, set<list<transition_p>>> apct_map;
 	for(auto& kv : tm){
-	 	for(const transition_p t : kv.second){
-	 		nt_level_map[t->priority].insert(t);
-	 	}
-	}
-
-	list<transition_p> ntl;
-	for(auto& ntp_kv : nt_level_map){
-		for(auto& nt : ntp_kv.second){
-			/** add these in some order to facilitate the recursion **/
-			/* TODO what order */
-			ntl.push_back(nt);
+		if(kv.second.empty()){
+			set<list<transition_p>> no_action_option;
+			no_action_option.insert(kv.second);
+			apct_map.insert({kv.first, no_action_option});
+		}else{
+			apct_map.insert({kv.first, _recursive_expand_possible_transitions(from, kv.second)});
 		}
 	}
-
-	return _recursive_expand_possible_transitions(from, ntl);
+	return apct_map;
 }
 
 string StateModel::as_dot_file() const {
@@ -1026,9 +1046,11 @@ list<State> StateMachine::move(string input){
 	list<State> passed_states;
 
 	previous_state = current_state;
-	map<string, set<transition_p>> cts = controlled_transitions_from(current_state);
+	map<string, list<transition_p>> cts = controlled_transitions_from(current_state);
 	for(const transition_p t : cts[input]){
-		current_state = current_state.move(t);
+		if(current_state.accepts(t)){
+			current_state = current_state.move(t);
+		}
 	}
 
 	/* report state changes after controlled transitions */
@@ -1056,9 +1078,11 @@ list<State> StateMachine::move(string input){
 
 	State intermediate_state = current_state;
 	/* TODO this disregards probabilistic nature of transitions */
-	list<transition_p> nts = nonconflicting_natural_transitions_from(current_state);
+	list<transition_p> nts = natural_transitions_from(current_state);
 	for(const transition_p t : nts){
-		current_state = current_state.move(t);
+		if(current_state.accepts(t)){
+			current_state = current_state.move(t);
+		}
 	}
 
 	/* report state changes after natural transitions */

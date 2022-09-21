@@ -6,7 +6,7 @@ Cerebellum aims to provide solutions to two main kinds of problems
 1. Path planning under constraints
 2. State estimation under uncertainties
 
-Path planning problems are problems whose goal is to find a way to bring the system from one state to another using only a certain subset of *controllable* transitions, while taking into account the systems natural responses and obeying restrictions such as forbidden states, cost limits, success rates, and safety thresholds (to be defined). State estimation problems are problems whose goal is to determine the likelihood that the system is in a certain state based on the history of *observable* states and transitions, as well as the known properties of the system itself. 
+Path planning problems are problems whose goal is to find a way to bring the system from one state to another using only a certain subset of *controllable* transitions, while taking into account the systems natural responses and obeying restrictions such as forbidden states, cost limits, success rates, and safety thresholds (to be defined). State estimation problems are problems whose goal is to determine the likelihood that the system is in a certain state based on the history of *observable* states, as well as the known properties of the system itself. 
 
 ## Motivating example
 
