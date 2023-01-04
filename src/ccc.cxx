@@ -1,6 +1,6 @@
 #include <iostream>
 #include <list>
-#include <cerebellum.h>
+#include <cerebellum>
 
 using namespace std;
 using namespace cerebellum;

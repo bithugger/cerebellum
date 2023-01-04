@@ -35,12 +35,13 @@ add_library(cerebellum SHARED
 	src/lib/state.cxx
 	src/lib/transition.cxx
 	src/lib/model.cxx
+	src/lib/parser.cxx
 )
 
 set_target_properties(cerebellum PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(cerebellum PROPERTIES SOVERSION 1)
 
-set_target_properties(cerebellum PROPERTIES PUBLIC_HEADER include/cerebellum.h)
+set_target_properties(cerebellum PROPERTIES PUBLIC_HEADER include/cerebellum)
 target_include_directories(cerebellum PRIVATE include)
 
 install(TARGETS cerebellum

@@ -24,7 +24,7 @@
 
 #define CATCH_CONFIG_MAIN
 
-#include <cerebellum.h>
+#include <cerebellum>
 #include <catch.hpp>
 #include <iostream>
 

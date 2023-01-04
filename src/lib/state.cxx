@@ -22,7 +22,8 @@
 *
 ******************************************************************************/
 
-#include <cerebellum.h>
+#include <cerebellum>
+#include <algorithm>
 
 using namespace cerebellum;
 using namespace std;
@@ -253,8 +254,8 @@ ostream& cerebellum::operator<<(ostream& os, const State& s) {
 vector<string> qualifier_names({"=", "!=", "<", "<=", ">", ">=", "*"});
 
 DataState::DataState(DataSource source, DataState::Qualifier qualifier, int value) :
-AtomicState("" + source->name + " " + qualifier_names[qualifier] + " " + to_string(value), 
-			"" + source->name + " " + qualifier_names[qualifier] + " " + to_string(value)),
+AtomicState("" + source->name + qualifier_names[qualifier] + to_string(value), 
+			"" + source->name + qualifier_names[qualifier] + to_string(value)),
 source(source),
 qualifier(qualifier),
 value(value)

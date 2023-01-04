@@ -1,0 +1,13 @@
+# Elevator model example
+
+<close_door> do -> dc
+<open_door> dc -> do @!mu @!md
+
+<move_up> ms -> mu @!do
+<stop> mu -> ms
+<move_down> ms -> md @!do
+<stop> md -> ms
+
+1 <= floor <= 3
+[climb] floor += 1 @mu
+[descend] floor -= 1 @md

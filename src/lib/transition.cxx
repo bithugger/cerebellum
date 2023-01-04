@@ -22,7 +22,7 @@
 *
 ******************************************************************************/
 
-#include <cerebellum.h>
+#include <cerebellum>
 
 using namespace cerebellum;
 using namespace std;

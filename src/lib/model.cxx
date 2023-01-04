@@ -22,7 +22,7 @@
 *
 ******************************************************************************/
 
-#include <cerebellum.h>
+#include <cerebellum>
 #include <utility>
 #include <algorithm>
 #include <sstream>
@@ -39,23 +39,89 @@ typedef pair<transition_bundle, list<transition_p>> move_pair;
 
 StateModel::StateModel(vector<transition_p> transitions, bool wait) :
 transitions(transitions.begin(), transitions.end()),
-allow_wait(wait)
+allow_wait(wait),
+state_map(),
+source_map()
 {
-
+	initialize_maps();
 }
 
 StateModel::StateModel(initializer_list<transition_p> transitions, bool wait) :
 transitions(transitions.begin(), transitions.end()),
-allow_wait(wait)
+allow_wait(wait),
+state_map(),
+source_map()
 {
-
+	initialize_maps();
 }
 
 StateModel::StateModel(const StateModel& b) :
 transitions(b.transitions),
-allow_wait(b.allow_wait)
+allow_wait(b.allow_wait),
+state_map(b.state_map),
+source_map(b.source_map)
 {
 
+}
+
+void StateModel::initialize_maps(){
+	for(const transition_p t : transitions){
+		for(const astate_p as : t->from.components){
+			if(as->type() == INT_DATA){
+				DataState& ds = static_cast<DataState&>(*as);
+				source_map[ds.source->name] = ds.source;
+			}else{
+				state_map[as->label] = as;
+			}
+		}
+		for(const astate_p as : t->to.components){
+			if(as->type() == INT_DATA){
+				DataState& ds = static_cast<DataState&>(*as);
+				source_map[ds.source->name] = ds.source;
+			}else{
+				state_map[as->label] = as;
+			}
+		}
+	}
+}
+
+State StateModel::find_state(vector<string> ass){
+	vector<astate_p> atomic_states;
+	for(const string& s : ass){
+		// check to see if this is a data source condition
+		size_t op_pos = s.find_first_of("<=>");
+		if(op_pos != string::npos && s.size() > op_pos + 1){
+			string data_label = s.substr(0, op_pos);
+			if(source_map.find(data_label) == source_map.end()){
+				// the data source does not belong in this model
+				return State();
+			}
+			DataSource src = source_map.at(data_label);
+			int val;
+			if(s[op_pos] == '<' && s[op_pos + 1] == '='){
+				val = stoi(s.substr(op_pos + 2));
+				atomic_states.push_back(src->value_leq(val));
+			}else if(s[op_pos] == '>' && s[op_pos + 1] == '='){
+				val = stoi(s.substr(op_pos + 2));
+				atomic_states.push_back(src->value_geq(val));
+			}else if(s[op_pos] == '='){
+				val = stoi(s.substr(op_pos + 1));
+				atomic_states.push_back(src->value_eq(val));
+			}else if(s[op_pos] == '<'){
+				val = stoi(s.substr(op_pos + 1));
+				atomic_states.push_back(src->value_lt(val));
+			}else if(s[op_pos] == '>'){
+				val = stoi(s.substr(op_pos + 1));
+				atomic_states.push_back(src->value_gt(val));
+			}
+		}else{
+			if(state_map.find(s) == state_map.end()){
+				return State();
+			}
+			atomic_states.push_back(state_map.at(s));
+		}
+	}
+	return State(atomic_states);
 }
 
 Path StateModel::find_path_around(const State from, const State to, vector<State> avoid){
@@ -155,7 +221,6 @@ vector<Path> StateModel::find_all_paths_back_around(const State x, const State a
 vector<Path> StateModel::find_all_paths_back_around(const State x, vector<State> avoid){
 	return path_find_dfs(x, x, avoid, true);
 }
-
 
 vector<PathWay> StateModel::find_all_pathways(const State from, const State to){
 	vector<State> avoids;
@@ -268,9 +333,10 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 
 	/* is the destination reachable? */
 	list<transition_p> transitions_in_path;
-	if(u == from || trans_map.find(dest) != trans_map.end()){
+	if(from == dest || trans_map.find(dest) != trans_map.end()){
 		u = dest;
 		while(u != from){
+			cout << "now at " << u << endl;
 			pair<transition_bundle, list<transition_p>> ts = trans_map.find(u)->second;
 			transition_bundle& tb = ts.first;
 
@@ -300,7 +366,6 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 	for(transition_p t : transitions_in_path){
 		path <<= t;
 	}
-
 	return path;
 }
 

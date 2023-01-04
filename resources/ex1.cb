@@ -1,0 +1,6 @@
+# Example 0, Toy Example
+
+<t1> a -> b
+<t2> b -> a @!d
+c -> d @c prob=50%
+

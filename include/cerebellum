@@ -44,6 +44,12 @@ typedef std::shared_ptr<AtomicState> astate_p;
 class Transition;
 typedef std::shared_ptr<Transition> transition_p;
 
+class DataState;
+typedef std::shared_ptr<DataState> dstate_p;
+
+class DataModel;
+typedef std::shared_ptr<DataModel> DataSource;
+
 //-----------------------------------------------------------------------------
 // Atomic State
 //-----------------------------------------------------------------------------
@@ -269,7 +275,11 @@ public:
 	/** Output a string containing text input to GraphViz for visualization **/
 	std::string as_dot_file() const;
 
+	/** create a state from a vector of atomic state labels, return empty if any state is not found in this model */
+	State find_state(std::vector<std::string>);
+
 	/** Find a single cost-optimal path using Djikstra's algorithm **/
+	/* WARNING THIS WILL NOT WORK IN MANY CASES */
 	Path find_path(const State from, const State to);
 
 	Path find_path_around(const State from, const State to, const State avoid);
@@ -324,6 +334,8 @@ public:
 protected:
 
 	bool allow_wait;
+	std::map<std::string, astate_p> state_map;
+	std::map<std::string, DataSource> source_map;
 
 	/** path finding algorithms **/
 	Path path_find_djikstra(const State from, const State to, std::vector<State> avoid);
@@ -358,6 +370,11 @@ protected:
 
 	/* follow a series of natural transitions from state x until a conflict arises or all transitions are used */
 	std::set<std::list<transition_p>> _recursive_expand_possible_transitions(const State x, std::list<transition_p> t_to_go);
+
+private:
+
+	/* initialize the state_map and source_map variables, used by the constructor */
+	void initialize_maps();
 
 };
 
@@ -397,11 +414,6 @@ protected:
 // Data State
 //-----------------------------------------------------------------------------
 
-class DataState;
-typedef std::shared_ptr<DataState> dstate_p;
-class DataModel;
-typedef std::shared_ptr<DataModel> DataSource;
-
 class DataState : public AtomicState {
 
 public:
@@ -439,7 +451,7 @@ class DataModel : public std::enable_shared_from_this<DataModel> {
 public:
 
 	static DataSource create_source(std::string);
-	static DataSource create_source(std::string, int ub, int lb);
+	static DataSource create_source(std::string, int lb, int ub);
 	
 	const std::string name;
 	const int lower_bound;
@@ -468,6 +480,9 @@ protected:
 
 bool operator==(const astate_p& x, const astate_p& y);
 bool operator<(const astate_p& x, const astate_p& y);
+
+/** create a state model specified in the .cb model format */
+StateModel parse_model(std::vector<std::string>);
 
 } // namespace cerebellum
 
