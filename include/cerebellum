@@ -482,6 +482,7 @@ bool operator==(const astate_p& x, const astate_p& y);
 bool operator<(const astate_p& x, const astate_p& y);
 
 /** create a state model specified in the .cb model format */
+StateModel parse_model(std::string);
 StateModel parse_model(std::vector<std::string>);
 
 } // namespace cerebellum

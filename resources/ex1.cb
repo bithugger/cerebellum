@@ -2,5 +2,5 @@
 
 <t1> a -> b
 <t2> b -> a @!d
-c -> d @c prob=50%
+c -> d prob=50%
 

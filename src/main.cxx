@@ -179,10 +179,32 @@ void print_pathway(PathWay pathway){
 	}
 }
 
-int main(int argc, char* argv[])
-{
+const string HELP_TEXT = R"(
+	path <from> <to> [options]
+		- find the best path from state <from> to state <to>
+		- 'best' is either based on cost or success rate
+		- options include cost limit, success rate limit, and obstacles
+	
+	allpath <from> <to> [options]
+		- find all available paths from state <from> to state <to>
+		- options can only include obstacles
+		- this can be impossibly slow if the model is non-trivial
+	
+	print
+		- display the model in dot-file format, suitable as input to GraphViz
+	
+	exit/quit/q
+		- exit from the program
+)";
+
+const string USAGE_TEXT = R"(
+	Usage: cb <model_file.cb>
+)";
+
+int main(int argc, char* argv[]){
 	if(argc < 2){
-		// display help text and exit
+		// display usage text and exit
+		cout << USAGE_TEXT << endl;
 		exit(0);
 	}
 
@@ -308,6 +330,8 @@ int main(int argc, char* argv[])
 							}
 						}
 					}
+				}else if(command == "help"){
+					cout << HELP_TEXT << endl;
 				}
 			}
 		}

@@ -106,6 +106,19 @@ bool equals_ignore_case(const string& a, const string& b){
 	return true;
 }
 
+StateModel cerebellum::parse_model(string all_lines){
+	vector<string> lines;
+
+	stringstream ss(all_lines);
+	string to;
+
+	while(getline(ss,to,'\n')){
+		lines.push_back(to);
+	}
+	
+	return parse_model(lines);
+}
+
 StateModel cerebellum::parse_model(vector<string> lines){
 	map<string, astate_p> states_map;
 	map<string, DataSource> source_map;

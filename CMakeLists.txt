@@ -52,20 +52,20 @@ install(TARGETS cerebellum
 # App
 ###############################################################################
 
-add_executable(app src/main.cxx)
-target_include_directories(app PRIVATE include)
-target_link_libraries(app cerebellum)
+add_executable(cb src/main.cxx)
+target_include_directories(cb PRIVATE include)
+target_link_libraries(cb cerebellum)
 
 if(MSVC)
 	# using MSVC
-	target_compile_options(app PRIVATE /EHsc /W3 /WX)
+	target_compile_options(cb PRIVATE /EHsc /W3 /WX)
 else()
 	if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 		# using Clang
-		target_compile_options(app PRIVATE -Werror -Wall -Wextra -pedantic)
+		target_compile_options(cb PRIVATE -Werror -Wall -Wextra -pedantic)
 	elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 		# using GCC
-		target_compile_options(app PRIVATE -Werror -Wall -Wextra -pedantic)
+		target_compile_options(cb PRIVATE -Werror -Wall -Wextra -pedantic)
 	endif()
 endif()
 
