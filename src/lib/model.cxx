@@ -336,7 +336,6 @@ Path StateModel::path_find_djikstra(const State from, const State to, vector<Sta
 	if(from == dest || trans_map.find(dest) != trans_map.end()){
 		u = dest;
 		while(u != from){
-			cout << "now at " << u << endl;
 			pair<transition_bundle, list<transition_p>> ts = trans_map.find(u)->second;
 			transition_bundle& tb = ts.first;
 

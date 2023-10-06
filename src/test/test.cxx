@@ -83,6 +83,7 @@ TEST_CASE("State logic", "[State]"){
 		REQUIRE( w.dimension() == 1);
 		REQUIRE( !(x.contains(w)) );
 		REQUIRE( y.contains(w) );
+		REQUIRE( !w.contains(y) );
 		REQUIRE( y != w );
 	}
 }

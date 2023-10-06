@@ -184,13 +184,16 @@ const string HELP_TEXT = R"(
 		- find the best path from state <from> to state <to>
 		- 'best' is either based on cost or success rate
 		- options include cost limit, success rate limit, and obstacles
+
+		e.g. path s1 s2 prob>50
+			 path s1 s2 !s3 cost<10
 	
 	allpath <from> <to> [options]
 		- find all available paths from state <from> to state <to>
 		- options can only include obstacles
 		- this can be impossibly slow if the model is non-trivial
 	
-	print
+	dot
 		- display the model in dot-file format, suitable as input to GraphViz
 	
 	exit/quit/q
@@ -235,7 +238,7 @@ int main(int argc, char* argv[]){
 				string command = inputs[0];
 				if(command == "exit" || command == "quit" || command == "q"){
 					running = false;
-				}else if(command == "print"){
+				}else if(command == "dot"){
 					cout << model.as_dot_file() << endl;
 				}else if(command == "path" || command == "allpath"){
 					if(inputs.size() < 3){

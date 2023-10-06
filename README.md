@@ -38,32 +38,37 @@ Run the example program on the simple elevator model
 ./bin/cb ../resources/elevator.cb
 ```
 
-![Elevator Model](https://g.gravizo.com/svg?
-digraph cerebellum {
-	newrank=true
-	subgraph cluster_floor {
-		label=floor
-		"floor = 3" [label=3]
-		"floor = 2" [label=2]
-		"floor = 1" [label=1]
-		"floor = 1" -> "floor = 2" [ color=red arrowhead=empty tooltip="activated (mu)\ncost: 1\nprob: 1"]
-		"floor = 2" -> "floor = 3" [ color=red arrowhead=empty tooltip="activated (mu)\ncost: 1\nprob: 1"]
-		"floor = 2" -> "floor = 1" [ color=red arrowhead=empty tooltip="activated (md)\ncost: 1\nprob: 1"]
-		"floor = 3" -> "floor = 2" [ color=red arrowhead=empty tooltip="activated (md)\ncost: 1\nprob: 1"]
-	}
-	{" do "} -> {" dc "} [ label="close_door" tooltip="cost: 1\nprob: 1"]
-	{" dc "} -> {" do "} [ label="open_door" arrowhead=empty tooltip="inhibited (mu) (md)\ncost: 1\nprob: 1"]
-	{" ms "} -> {" mu "} [ label="move_up" arrowhead=empty tooltip="inhibited (do)\ncost: 1\nprob: 1"]
-	{" mu "} -> {" ms "} [ label="stop" tooltip="cost: 1\nprob: 1"]
-	{" ms "} -> {" md "} [ label="move_down" arrowhead=empty tooltip="inhibited (do)\ncost: 1\nprob: 1"]
-	{" md "} -> {" ms "} [ label="stop" tooltip="cost: 1\nprob: 1"]
-}
-)
+```
+  ┌──────────────┐
+  ▼              │
+┌────┐         ┌────┐
+│ do │  ────▶  │ dc │
+└────┘         └────┘
+
+┌−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−┐
+╎        floor                      ╎
+╎   ┌──────────────┐                ╎
+╎   ▽              │                ╎
+╎ ┌────┐         ┌────┐       ┌───┐ ╎
+╎ │ 3  │ ──────▷ │ 2  │ ────▷ │ 1 │ ╎
+╎ └────┘         └────┘       └───┘ ╎
+╎                  △            │   ╎
+╎                  └────────────┘   ╎
+└−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−−┘
+
+  ┌────────────┐
+  │            ▼
+┌────┐       ┌────┐       ┌────┐
+│ mu │ ◀───  │ ms │ ◀───  │ md │
+└────┘       └────┘       └────┘
+               │            ▲
+               └────────────┘
+```
 
 Elevator model states
-- three floor states: floor = 1, floor = 2, and floor = 3
 - two door states: door open (do) and door closed (dc)
-- three motion states: stopped (ms), moving up (mu), and moving down (md)
+- three floor states: floor = 1, floor = 2, and floor = 3
+- three motion states: moving up (mu), stopped (ms), and moving down (md)
 
 Elevator model transitions
 - close_door: controllable
